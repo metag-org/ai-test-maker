@@ -1,0 +1,42 @@
+# 本地开发专用编排：自带本地 PostgreSQL 容器，零配置一键启动
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: review-test-local-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-testmaker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testmaker}
+      POSTGRES_DB: ${POSTGRES_DB:-review_test}
+    ports:
+      - "${LOCAL_PG_PORT:-54329}:5432"
+    volumes:
+      - review_test_local_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-testmaker} -d ${POSTGRES_DB:-review_test}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: review-test-app:latest
+    container_name: review-test-local-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-testmaker}:${POSTGRES_PASSWORD:-testmaker}@db:5432/${POSTGRES_DB:-review_test}
+      DATA_DIR: /app/data/uploads
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+    volumes:
+      - ./data/uploads:/app/data/uploads
+
+volumes:
+  review_test_local_pgdata:

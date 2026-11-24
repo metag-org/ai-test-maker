@@ -1,0 +1,333 @@
+/* ==========================================================================
+   日本テスト用紙（B4 / A4）印刷・縦書き／横書き専用スタイル
+   ========================================================================== */
+
+.exam-sheet {
+  font-family: 'Shippori Mincho', 'Yu Mincho', 'Hiragino Mincho ProN', serif;
+  color: #000;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.exam-sheet * {
+  box-sizing: border-box;
+}
+
+/* 画面プレビュー時の用紙サイズ再現 */
+.exam-paper-b4-landscape {
+  width: 364mm;
+  min-height: 257mm;
+  padding: 12mm 14mm;
+}
+
+.exam-paper-b4-portrait {
+  width: 257mm;
+  min-height: 364mm;
+  padding: 14mm 14mm;
+}
+
+.exam-paper-a4-portrait {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 12mm 12mm;
+}
+
+.exam-paper-a4-landscape {
+  width: 297mm;
+  min-height: 210mm;
+  padding: 10mm 12mm;
+}
+
+/* ==========================================================================
+   国語：縦書きテストスタイル（右→左列組・右傍線・ルビ・縦中横・底部揃い解答欄）
+   ========================================================================== */
+.kokugo-vertical-container {
+  writing-mode: vertical-rl;
+  -webkit-writing-mode: vertical-rl;
+  text-orientation: mixed;
+  line-height: 1.9;
+  font-size: calc(11.5pt * var(--exam-font-scale, 1));
+  letter-spacing: 0.05em;
+  width: 100%;
+  height: 226mm;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+
+.exam-paper-b4-portrait .kokugo-vertical-container {
+  height: 330mm;
+}
+
+.exam-paper-a4-portrait .kokugo-vertical-container {
+  height: 266mm;
+}
+
+.exam-paper-a4-landscape .kokugo-vertical-container {
+  height: 184mm;
+}
+
+.kokugo-header-vertical {
+  border-left: 2px solid #000;
+  padding-left: 4.5mm;
+  margin-left: 5mm;
+  height: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6mm;
+  flex-shrink: 0;
+}
+
+.kokugo-daimon-lead {
+  height: 100%;
+  padding: 2mm 3mm;
+  margin-left: 3.5mm;
+  font-weight: 600;
+  font-size: calc(12pt * var(--exam-font-scale, 1));
+  flex-shrink: 0;
+}
+
+.kokugo-grid-strip {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-top: 1.2px solid #000;
+  border-bottom: 1.2px solid #000;
+  border-right: 1.2px solid #000;
+  margin-left: 6mm;
+}
+
+.kokugo-question-col {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  height: 100%;
+  width: calc(15.5mm * max(1, var(--exam-font-scale, 1)));
+  border-left: 1px solid #334155;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: stretch;
+}
+
+.kokugo-qnum-cell {
+  writing-mode: horizontal-tb;
+  height: 9mm;
+  border-bottom: 1px solid #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'BIZ UDPGothic', sans-serif;
+  font-weight: 700;
+  font-size: 10pt;
+  flex-shrink: 0;
+}
+
+.kokugo-qbody-cell {
+  flex: 1;
+  padding: 4mm 2mm 3mm 2mm;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+.kokugo-qanswer-cell {
+  height: 58mm;
+  border-top: 1.2px solid #000;
+  padding: 2.5mm 1.5mm;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+}
+
+.exam-paper-a4-landscape .kokugo-qanswer-cell {
+  height: 46mm;
+}
+
+/* 縦書き右傍線・横書き下線 */
+.kokugo-bosen {
+  border-right: 1.6px solid #000;
+  padding-right: 2px;
+  margin-right: 1px;
+}
+
+.horizontal-bosen {
+  border-bottom: 1.6px solid #000;
+  padding-bottom: 1px;
+}
+
+.tcy {
+  text-combine-upright: all;
+  -webkit-text-combine: horizontal;
+}
+
+/* 縦書き漢字マス目（十字点線入り） */
+.kanji-grid-vertical {
+  display: flex;
+  flex-direction: row;
+  border: 1.2px solid #000;
+  background: #fff;
+}
+
+.kanji-cell {
+  width: 10.5mm;
+  height: 10.5mm;
+  position: relative;
+  border-top: 1px solid #000;
+  background-color: #fff;
+}
+
+.kanji-cell:first-child {
+  border-top: none;
+}
+
+.kanji-cell::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  border-left: 0.6px dashed #cbd5e1;
+}
+
+.kanji-cell::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  border-top: 0.6px dashed #cbd5e1;
+}
+
+/* 漢字の読み用：縦長ふりがな欄 */
+.reading-box-vertical {
+  width: 8.5mm;
+  height: 48mm;
+  border: 1px dashed #64748b;
+  background: #fff;
+}
+
+.exam-paper-a4-landscape .reading-box-vertical {
+  height: 38mm;
+}
+
+/* ==========================================================================
+   理科・社会：横書きスタイル（2段組対応・大問枠・図版保護）
+   ========================================================================== */
+.risha-horizontal-container {
+  writing-mode: horizontal-tb;
+  font-size: calc(10.5pt * var(--exam-font-scale, 1));
+  line-height: 1.72;
+}
+
+.risha-two-columns {
+  column-count: 2;
+  column-gap: 10mm;
+  column-rule: 0.6px solid #cbd5e1;
+}
+
+.risha-group-block {
+  break-inside: avoid-column;
+  page-break-inside: avoid;
+  margin-bottom: 7mm;
+}
+
+.risha-question-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 3.5mm;
+}
+
+.daimon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 6.5mm;
+  height: 6.5mm;
+  border: 1.5px solid #000;
+  font-family: 'BIZ UDPGothic', sans-serif;
+  font-weight: 700;
+  font-size: 11pt;
+  margin-right: 2.5mm;
+  flex-shrink: 0;
+}
+
+.blank-token {
+  display: inline-block;
+  min-width: 14mm;
+  border-bottom: 1px solid #000;
+  text-align: center;
+  margin: 0 2px;
+  padding: 0 3px;
+  font-size: 0.9em;
+}
+
+.answer-line-horizontal {
+  display: block;
+  width: 100%;
+  height: 7.5mm;
+  border-bottom: 0.8px solid #334155;
+  margin-top: 1mm;
+}
+
+/* ルビ調整 */
+ruby rt {
+  font-size: 0.55em;
+  line-height: 1;
+}
+
+/* ==========================================================================
+   @media print 厳密制御（科目ごとの自動改ページ・UI非表示）
+   ========================================================================== */
+@media print {
+  body {
+    background: #fff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only-wrapper {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    overflow: visible !important;
+  }
+
+  .exam-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+    min-height: auto !important;
+    padding: 0 !important;
+  }
+
+  .subject-page-break {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .subject-page-break:first-child {
+    break-before: auto;
+    page-break-before: auto;
+  }
+
+  .kokugo-vertical-container {
+    height: 94vh !important;
+  }
+}

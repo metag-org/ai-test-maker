@@ -1,0 +1,27 @@
+# NAS 生产一键部署编排：复用 NAS 已有 PostgreSQL（外部网络 nas-shared-net）
+services:
+  review-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: review-test-app:latest
+    container_name: review-test-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8089}:8000"
+    environment:
+      TZ: Asia/Tokyo
+      # 指向 nas-shared-net 内已有 Postgres 容器（示例：postgresql://postgres:password@nas-postgres:5432/review_test）
+      DATABASE_URL: ${DATABASE_URL:?请在 .env 中配置 NAS PostgreSQL 的 DATABASE_URL}
+      DATA_DIR: /app/data/uploads
+      # 留空则家庭内网免登录；若需反代公网访问可设置任意密码
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      SECRET_KEY: ${SECRET_KEY:-}
+    volumes:
+      - ./data/uploads:/app/data/uploads
+    networks:
+      - nas-shared-net
+
+networks:
+  nas-shared-net:
+    external: true

@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="bg-grad" x1="10" y1="6" x2="118" y2="122" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="50%" stop-color="#3730a3" />
+      <stop offset="100%" stop-color="#1e1b4b" />
+    </linearGradient>
+    <radialGradient id="top-glow" cx="24%" cy="16%" r="68%">
+      <stop offset="0%" stop-color="#818cf8" stop-opacity="0.5" />
+      <stop offset="100%" stop-color="#4f46e5" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="paper-grad" x1="28" y1="22" x2="94" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#eef2ff" />
+    </linearGradient>
+    <linearGradient id="fold-grad" x1="72" y1="22" x2="92" y2="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#c7d2fe" />
+      <stop offset="100%" stop-color="#a5b4fc" />
+    </linearGradient>
+    <linearGradient id="check-grad" x1="78" y1="74" x2="112" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="spark-grad" x1="90" y1="12" x2="114" y2="40" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="52%" stop-color="#fbbf24" />
+      <stop offset="100%" stop-color="#f59e0b" />
+    </linearGradient>
+    <filter id="soft-shadow" x="-14%" y="-10%" width="132%" height="132%">
+      <feDropShadow dx="0" dy="5" stdDeviation="4.5" flood-color="#0f172a" flood-opacity="0.28" />
+    </filter>
+    <filter id="badge-shadow" x="-20%" y="-20%" width="145%" height="145%">
+      <feDropShadow dx="0" dy="3" stdDeviation="3.5" flood-color="#0f172a" flood-opacity="0.32" />
+    </filter>
+  </defs>
+
+  <!-- Squircle バッジ背景 -->
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#bg-grad)" />
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="url(#top-glow)" />
+  <rect x="5.5" y="5.5" width="117" height="117" rx="26.5" stroke="#ffffff" stroke-opacity="0.22" stroke-width="1.5" />
+
+  <!-- 背面の2枚目テスト用紙（左下側のみ優雅に見せる） -->
+  <g transform="rotate(-7.5 54 68)" opacity="0.26">
+    <rect x="21" y="28" width="60" height="78" rx="9" fill="#c7d2fe" />
+  </g>
+
+  <!-- メインのテスト用紙（右上折り返し） -->
+  <g filter="url(#soft-shadow)">
+    <path
+      d="M36 22 H73 L93 42 V94 C93 99.523 88.523 104 83 104 H36 C30.477 104 26 99.523 26 94 V32 C26 26.477 30.477 22 36 22 Z"
+      fill="url(#paper-grad)"
+    />
+    <!-- 折り返し角 -->
+    <path d="M73 22 V35 C73 38.866 76.134 42 80 42 H93 L73 22 Z" fill="url(#fold-grad)" />
+  </g>
+
+  <!-- 上部：茜色タイトルアクセントバー -->
+  <rect x="35" y="34" width="26" height="5" rx="2.5" fill="#e11d48" opacity="0.9" />
+
+  <!-- 左側：国語 漢字マス（2マス＋十字点線） -->
+  <g stroke="#4338ca" stroke-width="2.1">
+    <rect x="35" y="47" width="19" height="19" rx="3.5" fill="#ffffff" />
+    <rect x="35" y="70" width="19" height="19" rx="3.5" fill="#ffffff" />
+  </g>
+  <g stroke="#a5b4fc" stroke-width="1.3" stroke-dasharray="2.4 2.4">
+    <line x1="44.5" y1="49" x2="44.5" y2="64" />
+    <line x1="37" y1="56.5" x2="52" y2="56.5" />
+    <line x1="44.5" y1="72" x2="44.5" y2="87" />
+    <line x1="37" y1="79.5" x2="52" y2="79.5" />
+  </g>
+
+  <!-- 右側：理社・設問テキストライン -->
+  <rect x="61" y="49" width="22" height="4.5" rx="2.25" fill="#6366f1" opacity="0.85" />
+  <rect x="61" y="59" width="18" height="4.5" rx="2.25" fill="#94a3b8" opacity="0.72" />
+  <rect x="61" y="69" width="22" height="4.5" rx="2.25" fill="#94a3b8" opacity="0.58" />
+  <rect x="61" y="79" width="13" height="4.5" rx="2.25" fill="#94a3b8" opacity="0.45" />
+
+  <!-- 右上：AI 抽出スパークル（大小2つの星芒） -->
+  <path
+    d="M100 13 C101.2 21.5 103.5 23.8 112 25 C103.5 26.2 101.2 28.5 100 37 C98.8 28.5 96.5 26.2 88 25 C96.5 23.8 98.8 21.5 100 13 Z"
+    fill="url(#spark-grad)"
+  />
+  <path
+    d="M111 36 C111.6 39.6 112.4 40.4 116 41 C112.4 41.6 111.6 42.4 111 46 C110.4 42.4 109.6 41.6 106 41 C109.6 40.4 110.4 39.6 111 36 Z"
+    fill="#fde68a"
+  />
+
+  <!-- 右下：復習・合格チェックバッジ -->
+  <g filter="url(#badge-shadow)">
+    <circle cx="93" cy="92" r="18.5" fill="#ffffff" />
+    <circle cx="93" cy="92" r="15.8" fill="url(#check-grad)" />
+    <path
+      d="M85.8 92.3 L90.8 97.3 L100.8 87"
+      stroke="#ffffff"
+      stroke-width="4"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </g>
+</svg>

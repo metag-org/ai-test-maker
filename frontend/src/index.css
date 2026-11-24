@@ -1,0 +1,180 @@
+@import '@fontsource/biz-udpgothic/400.css';
+@import '@fontsource/biz-udpgothic/700.css';
+@import '@fontsource/shippori-mincho/400.css';
+@import '@fontsource/shippori-mincho/600.css';
+@import '@fontsource/shippori-mincho/700.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  accent-color: #4f46e5;
+  scrollbar-gutter: stable;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+::selection {
+  background-color: #e0e7ff;
+  color: #1e1b4b;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'BIZ UDPGothic', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+    color: #0f172a;
+    background-color: #f6f8fc;
+    min-block-size: 100dvh;
+  }
+
+  textarea {
+    resize: vertical;
+  }
+
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+  }
+}
+
+/* 温和日系学習ワークスペース背景（印刷時は無効化） */
+.app-workspace-bg {
+  background-color: #f6f8fc;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 12% -5%, rgba(99, 102, 241, 0.11), transparent 60%),
+    radial-gradient(ellipse 65% 45% at 92% 0%, rgba(16, 185, 129, 0.08), transparent 55%),
+    radial-gradient(rgba(148, 163, 184, 0.16) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 24px 24px;
+  background-attachment: fixed;
+}
+
+@media print {
+  .app-workspace-bg {
+    background: #ffffff !important;
+    background-image: none !important;
+  }
+}
+
+/* 視覚的に隠しつつスクリーンリーダー・キーボード操作を維持 */
+.visually-hidden {
+  position: absolute;
+  clip-path: inset(50%);
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  white-space: nowrap;
+}
+
+/* ネイティブラジオカード用フォーカス表示 */
+.radio-card:has(input:focus-visible) {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+/* スクロール連鎖防止＋レイアウトシフト防止 */
+.scroll-contain {
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+/* タグ・ピル群の折り返しバランス（非対応ブラウザは wrap にフォールバック） */
+.flex-balance {
+  display: flex;
+  flex-wrap: wrap;
+  flex-wrap: balance;
+}
+
+/* 統一入力コントロール */
+@layer components {
+  .ui-card {
+    @apply bg-white/95 backdrop-blur-sm rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.08)];
+  }
+
+  .ui-input {
+    @apply w-full rounded-xl border border-slate-300/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)] transition duration-150 hover:border-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 focus:outline-none;
+  }
+
+  .ui-select {
+    @apply rounded-xl border border-slate-300/90 bg-white px-3.5 py-2.5 text-sm text-slate-900 shadow-[inset_0_1px_2px_rgba(15,23,42,0.03)] transition duration-150 hover:border-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 focus:outline-none;
+  }
+
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-indigo-600 to-indigo-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-indigo-600/25 transition duration-150 hover:from-indigo-500 hover:to-indigo-600 hover:shadow-md hover:shadow-indigo-600/30 active:translate-y-[0.5px] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .ui-btn-emerald {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-emerald-600 to-emerald-700 px-5 py-2.5 text-sm font-bold text-white shadow-sm shadow-emerald-600/25 transition duration-150 hover:from-emerald-500 hover:to-emerald-600 hover:shadow-md hover:shadow-emerald-600/30 active:translate-y-[0.5px] disabled:pointer-events-none disabled:opacity-50;
+  }
+
+  .ui-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300/90 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition duration-150 hover:bg-slate-50 hover:border-slate-400 hover:text-slate-900 active:translate-y-[0.5px] disabled:pointer-events-none disabled:opacity-50;
+  }
+}
+
+/* タブリスト：サイズを変えず擬似要素のボトムボーダーで選択状態を示す（WCAG 1.4.1 / Forced Colors 対応） */
+.ui-tablist {
+  display: flex;
+  align-items: stretch;
+  gap: 0.25rem;
+  overflow-x: auto;
+  border-block-end: 1px solid #e2e8f0;
+}
+
+.ui-tab {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.125rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #475569;
+  white-space: nowrap;
+  border-radius: 0.75rem 0.75rem 0 0;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.ui-tab:hover {
+  color: #0f172a;
+  background-color: #f8fafc;
+}
+
+.ui-tab[aria-selected='true'] {
+  color: #4338ca;
+}
+
+.ui-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  border-block-end: 3px solid #4f46e5;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast {
+  animation: toast-enter 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

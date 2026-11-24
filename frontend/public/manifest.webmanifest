@@ -1,0 +1,26 @@
+{
+  "name": "復習テストメーカー",
+  "short_name": "復習テスト",
+  "start_url": "/upload",
+  "display": "standalone",
+  "background_color": "#f6f8fc",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
