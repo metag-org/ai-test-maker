@@ -1,5 +1,5 @@
 from app.models.question import Question, QuestionGroup, QuestionImage
-from app.models.exam import Exam, ExamItem
+from app.models.exam import Exam, ExamAnswer, ExamItem, ExamSubmission
 from app.models.setting import AppSetting
 
 __all__ = [
@@ -8,5 +8,7 @@ __all__ = [
     "Question",
     "Exam",
     "ExamItem",
+    "ExamSubmission",
+    "ExamAnswer",
     "AppSetting",
 ]

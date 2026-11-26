@@ -58,6 +58,10 @@ class QuestionImageUpdate(BaseModel):
     sort_order: int | None = None
 
 
+class ImageRotateRequest(BaseModel):
+    angle_cw: Literal[90, 180, 270] = 90
+
+
 class QuestionBase(BaseModel):
     sort_order: int = 0
     question_type: QuestionType = "short_answer"
@@ -65,6 +69,8 @@ class QuestionBase(BaseModel):
     options: list[OptionItem] = Field(default_factory=list)
     answer_box_config: dict[str, Any] = Field(default_factory=dict)
     manual_answer: str | None = None
+    answer_aliases: list[str] = Field(default_factory=list)
+    grading_note: str = ""
     memo: str = ""
     needs_review: bool = False
 
@@ -111,6 +117,7 @@ class QuestionGroupRead(BaseModel):
     lead_text: str
     status: GroupStatus
     tags: list[str]
+    llm_usage: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: datetime
     questions: list[QuestionRead] = Field(default_factory=list)
@@ -172,6 +179,11 @@ class ExamSummaryRead(BaseModel):
     item_count: int = 0
     wrong_count: int = 0
     subjects: list[str] = Field(default_factory=list)
+    submission_count: int = 0
+    latest_submission_id: UUID | None = None
+    latest_submission_status: str | None = None
+    latest_correct_count: int | None = None
+    latest_total_count: int | None = None
 
 
 class ExamGroupSectionRead(BaseModel):
@@ -190,6 +202,116 @@ class ExamDetailRead(BaseModel):
 
 class ExamItemGradeRequest(BaseModel):
     is_wrong: bool | None = None
+
+
+# --- Online Solving & Submission Schemas ---
+
+SubmissionMode = Literal["full", "wrong_only"]
+SubmissionStatus = Literal["in_progress", "grading", "graded", "reviewed"]
+InputMode = Literal["choice", "handwriting", "text"]
+AiGradeStatus = Literal["correct", "wrong", "partial", "uncertain", "no_key", "unanswered"]
+
+
+class SubmissionCreateRequest(BaseModel):
+    mode: SubmissionMode = "full"
+
+
+class ExamAnswerSaveRequest(BaseModel):
+    input_mode: InputMode = "handwriting"
+    selected_options: list[str] = Field(default_factory=list)
+    typed_text: str = ""
+    strokes_data: dict[str, Any] = Field(default_factory=dict)
+    image_data_url: str | None = None
+    duration_seconds: int | None = Field(default=None, ge=0)
+
+
+class ExamAnswerRead(BaseModel):
+    id: UUID
+    submission_id: UUID
+    exam_item_id: UUID
+    question_id: UUID
+    input_mode: InputMode
+    selected_options: list[str] = Field(default_factory=list)
+    typed_text: str = ""
+    strokes_data: dict[str, Any] = Field(default_factory=dict)
+    handwriting_image_path: str | None = None
+    recognized_text: str | None = None
+    stroke_issues: str | None = None
+    ai_confidence: float | None = None
+    ai_status: AiGradeStatus = "unanswered"
+    ai_feedback: str = ""
+    final_is_wrong: bool | None = None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ExamSubmissionSummaryRead(BaseModel):
+    id: UUID
+    exam_id: UUID
+    attempt_number: int
+    mode: SubmissionMode
+    status: SubmissionStatus
+    started_at: datetime
+    submitted_at: datetime | None = None
+    duration_seconds: int = 0
+    total_count: int = 0
+    correct_count: int = 0
+    wrong_count: int = 0
+    uncertain_count: int = 0
+    synced_to_bank: bool = False
+    llm_usage: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"from_attributes": True}
+
+
+class SubmissionSubmitRequest(BaseModel):
+    duration_seconds: int | None = Field(default=None, ge=0)
+
+
+class SubmissionRegradeRequest(BaseModel):
+    rerun_ocr: bool = False
+
+
+class ExamAnswerReviewRequest(BaseModel):
+    final_is_wrong: bool | None = None
+
+
+class SubmissionItemBundle(BaseModel):
+    exam_item: ExamItemRead
+    question: QuestionRead
+    answer: ExamAnswerRead
+
+
+class SubmissionGroupSection(BaseModel):
+    group: QuestionGroupRead
+    items: list[SubmissionItemBundle]
+
+
+class ExamSubmissionDetailRead(ExamSubmissionSummaryRead):
+    exam_title: str
+    sections: dict[str, list[SubmissionGroupSection]]
+    all_attempts: list[ExamSubmissionSummaryRead] = Field(default_factory=list)
+
+
+# --- Answer Key Suggestion / Extraction Schemas ---
+
+class AnswerSuggestionItem(BaseModel):
+    question_id: UUID
+    question_order: int
+    suggested_answer: str
+    suggested_aliases: list[str] = Field(default_factory=list)
+    suggested_grading_note: str = ""
+    confidence: float = 0.0
+    reason: str = ""
+
+
+class AnswerSuggestionResponse(BaseModel):
+    group_id: UUID
+    source: Literal["ai_suggest", "answer_image"]
+    items: list[AnswerSuggestionItem] = Field(default_factory=list)
+    call_usage: dict[str, Any] = Field(default_factory=dict)
+    group_llm_usage: dict[str, Any] = Field(default_factory=dict)
 
 
 # --- Settings & Auth Schemas ---

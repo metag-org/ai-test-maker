@@ -96,7 +96,7 @@ def create_exam(payload: ExamCreateRequest, db: Session = Depends(get_db)) -> Ex
 def list_exams(db: Session = Depends(get_db)) -> list[ExamSummaryRead]:
     exams = (
         db.query(Exam)
-        .options(selectinload(Exam.items))
+        .options(selectinload(Exam.items), selectinload(Exam.submissions))
         .order_by(Exam.created_at.desc())
         .all()
     )
@@ -104,6 +104,8 @@ def list_exams(db: Session = Depends(get_db)) -> list[ExamSummaryRead]:
     for ex in exams:
         subjs = [s for s in SUBJECT_ORDER if any(it.subject == s for it in ex.items)]
         wrong_cnt = sum(1 for it in ex.items if it.is_wrong is True)
+        subs_sorted = sorted(ex.submissions, key=lambda s: s.attempt_number, reverse=True)
+        latest = subs_sorted[0] if subs_sorted else None
         res.append(
             ExamSummaryRead(
                 id=ex.id,
@@ -114,6 +116,11 @@ def list_exams(db: Session = Depends(get_db)) -> list[ExamSummaryRead]:
                 item_count=len(ex.items),
                 wrong_count=wrong_cnt,
                 subjects=subjs,
+                submission_count=len(subs_sorted),
+                latest_submission_id=latest.id if latest else None,
+                latest_submission_status=latest.status if latest else None,
+                latest_correct_count=latest.correct_count if latest else None,
+                latest_total_count=latest.total_count if latest else None,
             )
         )
     return res
@@ -234,9 +241,14 @@ def grade_exam_item(
 
 @router.delete("/{exam_id}")
 def delete_exam(exam_id: uuid.UUID, db: Session = Depends(get_db)) -> dict[str, bool]:
-    exam = db.get(Exam, exam_id)
+    from app.routers.submissions import cleanup_submission_files
+
+    exam = db.query(Exam).options(selectinload(Exam.submissions)).filter(Exam.id == exam_id).first()
     if exam is None:
         raise HTTPException(status_code=404, detail="テストが見つかりません。")
+    sub_ids = [s.id for s in exam.submissions]
     db.delete(exam)
     db.commit()
+    for sid in sub_ids:
+        cleanup_submission_files(sid)
     return {"deleted": True}

@@ -8,8 +8,15 @@ from app.config import settings
 from app.database import get_db
 from app.models.question import Question, QuestionGroup, QuestionImage
 from app.schemas import QuestionGroupRead
-from app.services.image_proc import crop_and_clean_image, save_source_image
-from app.services.llm.provider import extract_questions_from_image
+from app.services.grading import record_group_llm_usage
+from app.services.image_proc import (
+    crop_and_clean_image,
+    delete_upload_file,
+    rotate_crop_box_cw,
+    rotate_source_image_cw,
+    save_source_image,
+)
+from app.services.llm.provider import extract_questions_from_image_with_usage
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -23,6 +30,19 @@ def _normalize_extracted_body(body: str) -> str:
     # 設問先頭に混入した問題番号（例: "1 ", "10 ", "(1) ", "① "）を除去
     text = re.sub(r"^(?:\(\d{1,2}\)|（\d{1,2}）|[①-⑳]|\d{1,2})[\s　\.．、]+", "", text)
     return text.strip()
+
+
+def _normalize_options(raw_options: list[dict]) -> list[dict]:
+    cleaned: list[dict] = []
+    for opt in raw_options or []:
+        lbl = str(opt.get("label") or "").strip()
+        txt = str(opt.get("text") or "").strip()
+        if not lbl and not txt:
+            continue
+        if lbl and txt and lbl == txt:
+            lbl = ""
+        cleaned.append({"label": lbl, "text": txt or lbl})
+    return cleaned
 
 
 def _normalize_answer_box(q_type: str, body: str, raw_box: dict) -> dict:
@@ -95,11 +115,20 @@ async def upload_and_extract(
     else:
         source_abs = settings.upload_path / source_rel
         try:
-            extracted = extract_questions_from_image(db, source_abs, subject)
+            extracted, extract_usage = extract_questions_from_image_with_usage(db, source_abs, subject)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"LLMによる問題抽出に失敗しました: {exc}") from exc
+
+        rot_cw = int(getattr(extracted, "image_rotation_cw", 0) or 0) % 360
+        if rot_cw in (90, 180, 270):
+            try:
+                old_source = source_rel
+                source_rel = rotate_source_image_cw(source_rel, rot_cw)
+                delete_upload_file(old_source)
+            except Exception:
+                rot_cw = 0
 
         groups_data = extracted.groups
         if not groups_data:
@@ -112,10 +141,12 @@ async def upload_and_extract(
                 status="draft",
                 tags=[],
             )
+            record_group_llm_usage(grp, "extract", extract_usage, shared_groups=1)
             db.add(grp)
             db.commit()
             created_ids.append(grp.id)
         else:
+            shared_cnt = len(groups_data)
             for g_data in groups_data:
                 grp = QuestionGroup(
                     subject=subject,
@@ -125,15 +156,19 @@ async def upload_and_extract(
                     status="draft",
                     tags=[t.strip() for t in g_data.tags if t.strip()],
                 )
+                record_group_llm_usage(grp, "extract", extract_usage, shared_groups=shared_cnt)
                 db.add(grp)
                 db.flush()
 
                 for idx, img_box in enumerate(g_data.images):
                     img_id = uuid.uuid4()
                     try:
+                        box_dict = img_box.model_dump()
+                        if rot_cw in (90, 180, 270):
+                            box_dict = rotate_crop_box_cw(box_dict, rot_cw)
                         raw_rel, clean_rel, norm_box = crop_and_clean_image(
                             source_rel,
-                            img_box.model_dump(),
+                            box_dict,
                             str(grp.id),
                             str(img_id),
                         )
@@ -165,7 +200,7 @@ async def upload_and_extract(
                             sort_order=q_idx,
                             question_type=q_data.question_type,
                             body=norm_body,
-                            options=[opt.model_dump() for opt in q_data.options],
+                            options=_normalize_options([opt.model_dump() for opt in q_data.options]),
                             answer_box_config=norm_box,
                             manual_answer=None,
                             memo="",

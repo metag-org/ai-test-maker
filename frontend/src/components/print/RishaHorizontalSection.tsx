@@ -1,8 +1,31 @@
 import React from 'react';
 import { uploadUrl } from '../../api/client';
-import type { ExamGroupSection, SubjectType } from '../../types';
+import type { ExamGroupSection, OptionItem, SubjectType } from '../../types';
 import { SUBJECT_LABELS } from '../../types';
 import { RichJapaneseText } from '../RichJapaneseText';
+
+function extractBlankLabels(body: string): string[] {
+  if (!body) return [];
+  const found: string[] = [];
+  const seen = new Set<string>();
+  // [[1]], [[①]], （①）, (②), （ア） などの明示的な空欄記号を出現順に抽出
+  const pattern = /\[\[([^\]]+)\]\]|[（(]\s*([①-⑳]|[０-９0-9]{1,2}|[ア-ン]|[A-Za-z])\s*[）)]/g;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(body)) !== null) {
+    const raw = (m[1] || m[2] || '').trim();
+    if (raw && !seen.has(raw)) {
+      seen.add(raw);
+      found.push(raw);
+    }
+  }
+  return found;
+}
+
+function isWordBankOption(opt: OptionItem): boolean {
+  const lbl = (opt.label || '').trim();
+  const txt = (opt.text || '').trim();
+  return !lbl || !txt || lbl === txt;
+}
 
 interface RishaHorizontalSectionProps {
   subject: SubjectType;
@@ -104,8 +127,11 @@ export const RishaHorizontalSection: React.FC<RishaHorizontalSectionProps> = ({
               <div className="space-y-3 pl-2">
                 {sec.items.map(({ exam_item, question }, qIdx) => {
                   const hasOptions = question.options && question.options.length > 0;
+                  const wordBankMode =
+                    hasOptions && question.options.every((o) => isWordBankOption(o));
                   const shortOptions =
-                    hasOptions && question.options.every((o) => (o.text || '').length <= 14);
+                    hasOptions && question.options.every((o) => (o.text || o.label || '').length <= 14);
+                  const blankLabels = extractBlankLabels(question.body || '');
 
                   return (
                     <div key={exam_item.id} className="risha-question-block">
@@ -155,29 +181,72 @@ export const RishaHorizontalSection: React.FC<RishaHorizontalSectionProps> = ({
 
                       {/* 選択肢一覧 */}
                       {hasOptions && (
-                        <div
-                          className={`mt-1.5 pl-6 grid gap-x-5 gap-y-1 text-[0.95em] ${
-                            shortOptions ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2'
-                          }`}
-                        >
-                          {question.options.map((opt, oIdx) => (
-                            <div key={oIdx} className="flex items-start gap-1">
-                              <span className="font-sans font-semibold shrink-0">{opt.label}</span>
-                              <span>
-                                <RichJapaneseText text={opt.text} />
-                              </span>
+                        wordBankMode ? (
+                          <div className="mt-1.5 pl-6 flex flex-wrap items-center gap-2 text-[0.95em]">
+                            <span className="font-sans text-[0.82em] font-semibold text-slate-600">
+                              選択肢：
+                            </span>
+                            {question.options.map((opt, oIdx) => {
+                              const content = (opt.text || opt.label || '').trim();
+                              return (
+                                <span key={oIdx} className="risha-choice-chip">
+                                  <RichJapaneseText text={content} />
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <div
+                            className={`mt-1.5 pl-6 grid gap-x-5 gap-y-1 text-[0.95em] ${
+                              shortOptions ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-1 sm:grid-cols-2'
+                            }`}
+                          >
+                            {question.options.map((opt, oIdx) => {
+                              const lbl = (opt.label || '').trim();
+                              const txt = (opt.text || '').trim();
+                              const same = !lbl || !txt || lbl === txt;
+                              return (
+                                <div key={oIdx} className="flex items-start gap-1.5">
+                                  {same ? (
+                                    <span className="risha-choice-chip">
+                                      <RichJapaneseText text={txt || lbl} />
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <span className="font-sans font-semibold shrink-0">{lbl}.</span>
+                                      <span>
+                                        <RichJapaneseText text={txt} />
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )
+                      )}
+
+                      {/* 解答欄（空欄番号あり -> 番号付き個別解答枠 / 選択 -> 解答枠 / 記述 -> 答＋下線） */}
+                      {blankLabels.length > 0 ? (
+                        <div className="risha-answer-row" aria-label="解答欄">
+                          <span className="risha-answer-label">答</span>
+                          {blankLabels.map((lbl) => (
+                            <div key={lbl} className="risha-answer-box">
+                              <span className="risha-answer-box-num">{lbl}</span>
+                              <span className="risha-answer-box-space" />
                             </div>
                           ))}
                         </div>
-                      )}
-
-                      {/* 解答欄（選択問題でも記号記入欄、記述問題なら下線） */}
-                      {hasOptions ? (
-                        <div className="mt-1.5 pl-6 text-right text-xs text-slate-700">
-                          答（　　　　　　）
+                      ) : hasOptions ? (
+                        <div className="risha-answer-row" aria-label="解答欄">
+                          <span className="risha-answer-label">答</span>
+                          <div className="risha-answer-box" style={{ minWidth: '28mm' }}>
+                            <span className="risha-answer-box-space" />
+                          </div>
                         </div>
                       ) : (
-                        <div className="pl-6">
+                        <div className="risha-answer-row-line" aria-label="解答欄">
+                          <span className="risha-answer-label">答</span>
                           <span className="answer-line-horizontal" />
                         </div>
                       )}

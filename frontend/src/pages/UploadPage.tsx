@@ -15,12 +15,16 @@ import {
   ImagePlus,
   Lightbulb,
   Loader2,
+  RotateCcw,
+  RotateCw,
   Settings,
   Sparkles,
   Trash2,
   UploadCloud,
 } from 'lucide-react';
 import { api } from '../api/client';
+import { useToast } from '../components/ToastProvider';
+import { Tooltip } from '../components/Tooltip';
 import type { FacetsResponse, LLMSettings, SubjectType } from '../types';
 import { SUBJECT_THEME } from '../utils/subjectTheme';
 
@@ -52,6 +56,7 @@ function formatFileSize(bytes: number): string {
 
 export const UploadPage: React.FC<UploadPageProps> = ({ onDraftsUpdated }) => {
   const navigate = useNavigate();
+  const { showToast } = useToast();
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const albumInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +119,42 @@ export const UploadPage: React.FC<UploadPageProps> = ({ onDraftsUpdated }) => {
     setPreviews((prev) => prev.filter((_, i) => i !== idx));
   };
 
+  const rotateFile = async (idx: number, angleCw: 90 | 270) => {
+    const srcUrl = previews[idx];
+    const origFile = files[idx];
+    if (!srcUrl || !origFile) return;
+
+    const img = new Image();
+    img.src = srcUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('画像の読み込みに失敗しました'));
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalHeight;
+    canvas.height = img.naturalWidth;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate((angleCw * Math.PI) / 180);
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/jpeg', 0.92)
+    );
+    if (!blob) return;
+
+    const nextFile = new File([blob], origFile.name.replace(/\.[^.]+$/, '') + '.jpg', {
+      type: 'image/jpeg',
+    });
+    const nextUrl = URL.createObjectURL(nextFile);
+    URL.revokeObjectURL(srcUrl);
+    setFiles((prev) => prev.map((f, i) => (i === idx ? nextFile : f)));
+    setPreviews((prev) => prev.map((u, i) => (i === idx ? nextUrl : u)));
+  };
+
   const clearAllFiles = () => {
     previews.forEach((p) => URL.revokeObjectURL(p));
     setFiles([]);
@@ -130,6 +171,9 @@ export const UploadPage: React.FC<UploadPageProps> = ({ onDraftsUpdated }) => {
     setLoading(true);
     setProgressIndex(0);
     let lastCreatedId: string | null = null;
+    let totalExtractTokens = 0;
+    let totalExtractIn = 0;
+    let totalExtractOut = 0;
     try {
       for (let i = 0; i < files.length; i++) {
         setProgressIndex(i + 1);
@@ -139,11 +183,24 @@ export const UploadPage: React.FC<UploadPageProps> = ({ onDraftsUpdated }) => {
             : `AIが問題を読み取り中 (${i + 1} / ${files.length}) — 手書き除去と図版切り出しを実行しています`
         );
         const created = await api.uploadAndExtract(files[i], subject, sourceName, skipLlm);
-        if (created.length > 0 && !lastCreatedId) {
-          lastCreatedId = created[0].id;
+        if (created.length > 0) {
+          if (!lastCreatedId) lastCreatedId = created[0].id;
+          // 1枚の画像から複数グループが抽出された場合は同一抽出コールのため先頭グループ分のみ加算
+          const ex = created[0].llm_usage?.extract;
+          if (ex && ex.total_tokens > 0) {
+            totalExtractTokens += ex.total_tokens;
+            totalExtractIn += ex.input_tokens;
+            totalExtractOut += ex.output_tokens;
+          }
         }
       }
       onDraftsUpdated();
+      if (totalExtractTokens > 0) {
+        showToast(
+          `AI問題抽出が完了しました（消費: ${totalExtractTokens.toLocaleString()} tokens / 入力 ${totalExtractIn.toLocaleString()}・出力 ${totalExtractOut.toLocaleString()}）`,
+          'success'
+        );
+      }
       navigate(lastCreatedId ? `/review?id=${lastCreatedId}` : '/review');
     } catch (err) {
       setError(err instanceof Error ? err.message : '抽出処理中にエラーが発生しました。');
@@ -496,11 +553,35 @@ export const UploadPage: React.FC<UploadPageProps> = ({ onDraftsUpdated }) => {
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <div className="px-2.5 py-2 flex items-center justify-between gap-2 text-[11px] bg-white">
-                      <span className="truncate font-medium text-slate-700">{files[idx]?.name}</span>
-                      <span className="shrink-0 text-slate-400">
-                        {files[idx] ? formatFileSize(files[idx].size) : ''}
+                    <div className="px-2.5 py-2 flex items-center justify-between gap-1.5 text-[11px] bg-white">
+                      <span className="truncate font-medium text-slate-700 flex-1 min-w-0">
+                        {files[idx]?.name}
                       </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <Tooltip content="アップロード前に左へ90°回転します。">
+                          <button
+                            type="button"
+                            onClick={() => rotateFile(idx, 270)}
+                            className="p-1 rounded-md border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                            aria-label={`${idx + 1}枚目を左に90度回転`}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="アップロード前に右へ90°回転します。">
+                          <button
+                            type="button"
+                            onClick={() => rotateFile(idx, 90)}
+                            className="p-1 rounded-md border border-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 transition"
+                            aria-label={`${idx + 1}枚目を右に90度回転`}
+                          >
+                            <RotateCw className="w-3.5 h-3.5" />
+                          </button>
+                        </Tooltip>
+                        <span className="text-slate-400 ml-0.5">
+                          {files[idx] ? formatFileSize(files[idx].size) : ''}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 ))}

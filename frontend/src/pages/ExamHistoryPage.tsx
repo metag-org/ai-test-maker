@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom';
 import {
   AlertCircle,
   Calendar,
+  CheckCircle2,
   ClipboardCheck,
   FileText,
   History,
+  PenLine,
   Plus,
   Printer,
   Trash2,
@@ -13,6 +15,7 @@ import {
 import { api } from '../api/client';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { useToast } from '../components/ToastProvider';
+import { Tooltip } from '../components/Tooltip';
 import type { ExamSummary } from '../types';
 import { SUBJECT_LABELS } from '../types';
 import { SUBJECT_THEME } from '../utils/subjectTheme';
@@ -140,6 +143,28 @@ export const ExamHistoryPage: React.FC = () => {
                       {new Date(ex.created_at).toLocaleString('ja-JP')}
                     </span>
                     <span className="font-medium text-slate-600">全 {ex.item_count} 問</span>
+                    {ex.submission_count > 0 && (
+                      <Tooltip content="オンライン解答の実施回数と直近の正答数です。クリックで最新結果を確認できます。">
+                        <Link
+                          to={
+                            ex.latest_submission_status === 'in_progress' && ex.latest_submission_id
+                              ? `/exams/${ex.id}/solve?submissionId=${ex.latest_submission_id}`
+                              : ex.latest_submission_id
+                              ? `/exams/${ex.id}/submissions/${ex.latest_submission_id}`
+                              : `/exams/${ex.id}/solve`
+                          }
+                          className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-0.5 text-indigo-700 font-bold ring-1 ring-inset ring-indigo-200/80 hover:bg-indigo-100 transition"
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          オンライン {ex.submission_count}回
+                          {ex.latest_submission_status === 'in_progress'
+                            ? '（解答中）'
+                            : ex.latest_correct_count !== null && ex.latest_total_count !== null
+                            ? `・直近 ${ex.latest_correct_count}/${ex.latest_total_count}`
+                            : ''}
+                        </Link>
+                      </Tooltip>
+                    )}
                     {ex.wrong_count > 0 && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-rose-700 font-bold ring-1 ring-inset ring-rose-200/80">
                         <AlertCircle className="w-3 h-3" />
@@ -151,20 +176,33 @@ export const ExamHistoryPage: React.FC = () => {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <Link
-                  to={`/exams/${ex.id}`}
-                  className="ui-btn-primary px-3.5 py-2 text-xs"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  印刷・PDF
-                </Link>
-                <Link
-                  to={`/exams/${ex.id}?mode=grade`}
-                  className="ui-btn-secondary px-3.5 py-2 text-xs"
-                >
-                  <ClipboardCheck className="w-3.5 h-3.5 text-indigo-600" />
-                  採点・間違い記録
-                </Link>
+                <Tooltip content="PC・タブレット上で直接手書き・選択解答し、AIが自動で読み取り＆採点します。何度でも再挑戦可能です。">
+                  <Link
+                    to={`/exams/${ex.id}/solve`}
+                    className="ui-btn-primary px-3.5 py-2 text-xs"
+                  >
+                    <PenLine className="w-3.5 h-3.5" />
+                    オンラインで解く
+                  </Link>
+                </Tooltip>
+                <Tooltip content="紙のテスト用紙（B4 / A4）として印刷・PDF保存します。">
+                  <Link
+                    to={`/exams/${ex.id}`}
+                    className="ui-btn-secondary px-3.5 py-2 text-xs"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-slate-600" />
+                    印刷・PDF
+                  </Link>
+                </Tooltip>
+                <Tooltip content="紙で解いたテストの間違いを手動で ○ / × 記録します。">
+                  <Link
+                    to={`/exams/${ex.id}?mode=grade`}
+                    className="ui-btn-secondary px-3.5 py-2 text-xs"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-indigo-600" />
+                    紙採点
+                  </Link>
+                </Tooltip>
                 <button
                   type="button"
                   onClick={() => setDeleteTarget(ex)}

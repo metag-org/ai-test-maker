@@ -7,20 +7,29 @@ import {
   Crop,
   Edit3,
   Eye,
+  ImagePlus,
   LayoutList,
+  Loader2,
   Plus,
+  RotateCcw,
+  RotateCw,
   Save,
   Sparkles,
   Trash2,
   Wand2,
 } from 'lucide-react';
 import { api, uploadUrl } from '../api/client';
+import { AnswerSuggestionDialog } from '../components/AnswerSuggestionDialog';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { GroupTokenUsageBar } from '../components/GroupTokenUsageBar';
 import { ImageCropBoxEditor } from '../components/ImageCropBoxEditor';
 import { ReviewPreviewPanel } from '../components/ReviewPreviewPanel';
 import { RichJapaneseText } from '../components/RichJapaneseText';
 import { useToast } from '../components/ToastProvider';
+import { InfoTooltip, Tooltip } from '../components/Tooltip';
 import type {
+  AnswerSuggestionItem,
+  AnswerSuggestionResponse,
   CropBox,
   OptionItem,
   Question,
@@ -44,8 +53,11 @@ interface EditableQuestion {
     cells?: number;
   };
   manual_answer: string;
+  answer_aliases_text: string;
+  grading_note: string;
   memo: string;
   needs_review: boolean;
+  is_ai_candidate?: boolean;
 }
 
 function toEditable(q: Question): EditableQuestion {
@@ -67,6 +79,8 @@ function toEditable(q: Question): EditableQuestion {
       cells: cfg.cells || 2,
     },
     manual_answer: q.manual_answer || '',
+    answer_aliases_text: (q.answer_aliases || []).join(', '),
+    grading_note: q.grading_note || '',
     memo: q.memo || '',
     needs_review: q.needs_review,
   };
@@ -96,6 +110,10 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState<'edit' | 'print' | 'bank'>('edit');
+  const [suggestingAnswers, setSuggestingAnswers] = useState(false);
+  const [extractingAnswerImg, setExtractingAnswerImg] = useState(false);
+  const [suggestionResult, setSuggestionResult] = useState<AnswerSuggestionResponse | null>(null);
+  const answerImgInputRef = useRef<HTMLInputElement | null>(null);
   const tabRefs = useRef<Record<'edit' | 'print' | 'bank', HTMLButtonElement | null>>({
     edit: null,
     print: null,
@@ -173,6 +191,11 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
                 : q.answer_box_config.type || 'blank_line',
           },
           manual_answer: q.manual_answer.trim() || null,
+          answer_aliases: q.answer_aliases_text
+            .split(/[,、|｜]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+          grading_note: q.grading_note.trim(),
           memo: q.memo,
           needs_review: q.needs_review,
         })),
@@ -251,6 +274,50 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
     setCurrentGroup(refreshed);
   };
 
+  const handleRecleanImage = async (imgId: string) => {
+    if (!currentGroup) return;
+    setCropping(true);
+    try {
+      await api.recleanGroupImage(currentGroup.id, imgId);
+      const refreshed = await api.getGroup(currentGroup.id);
+      setCurrentGroup(refreshed);
+      showToast('図版の補正を再実行しました。', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '図版の再補正に失敗しました。', 'error');
+    } finally {
+      setCropping(false);
+    }
+  };
+
+  const handleRotateImage = async (imgId: string, angleCw: 90 | 180 | 270) => {
+    if (!currentGroup) return;
+    setCropping(true);
+    try {
+      await api.rotateGroupImage(currentGroup.id, imgId, angleCw);
+      const refreshed = await api.getGroup(currentGroup.id);
+      setCurrentGroup(refreshed);
+      showToast('図版を回転しました。', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '図版の回転に失敗しました。', 'error');
+    } finally {
+      setCropping(false);
+    }
+  };
+
+  const handleRotateSourceImage = async (angleCw: 90 | 180 | 270) => {
+    if (!currentGroup) return;
+    setCropping(true);
+    try {
+      const updated = await api.rotateGroupSourceImage(currentGroup.id, angleCw);
+      setCurrentGroup(updated);
+      showToast('原本画像とすべての図版を一括回転しました。', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : '原本画像の回転に失敗しました。', 'error');
+    } finally {
+      setCropping(false);
+    }
+  };
+
   const handleImageCaptionBlur = async (imgId: string, caption: string) => {
     if (!currentGroup) return;
     await api.updateGroupImage(currentGroup.id, imgId, { caption });
@@ -277,10 +344,79 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
         answer_box_config:
           subject === 'kokugo' ? { type: 'kanji_grid', cells: 2 } : { type: 'blank_line', cells: 2 },
         manual_answer: '',
+        answer_aliases_text: '',
+        grading_note: '',
         memo: '',
         needs_review: false,
       },
     ]);
+  };
+
+  const handleSuggestAnswersByAI = async () => {
+    if (!currentGroup) return;
+    setSuggestingAnswers(true);
+    setError('');
+    try {
+      const res = await api.suggestGroupAnswers(currentGroup.id);
+      if (res.group_llm_usage) {
+        setCurrentGroup((prev) => (prev ? { ...prev, llm_usage: res.group_llm_usage } : prev));
+      }
+      setSuggestionResult(res);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'AI解答候補の生成に失敗しました。';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setSuggestingAnswers(false);
+    }
+  };
+
+  const handleUploadAnswerSheet = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !currentGroup) return;
+    setExtractingAnswerImg(true);
+    setError('');
+    try {
+      const res = await api.extractGroupAnswersFromImage(currentGroup.id, file);
+      if (res.group_llm_usage) {
+        setCurrentGroup((prev) => (prev ? { ...prev, llm_usage: res.group_llm_usage } : prev));
+      }
+      setSuggestionResult(res);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '解答ページからの抽出に失敗しました。';
+      setError(msg);
+      showToast(msg, 'error');
+    } finally {
+      setExtractingAnswerImg(false);
+    }
+  };
+
+  const handleApplySuggestions = (selectedItems: AnswerSuggestionItem[]) => {
+    const byOrder = new Map<number, AnswerSuggestionItem>();
+    selectedItems.forEach((it) => byOrder.set(it.question_order, it));
+
+    setQuestions((prev) =>
+      prev.map((q, idx) => {
+        const hit = byOrder.get(idx + 1);
+        if (!hit) return q;
+        return {
+          ...q,
+          manual_answer: hit.suggested_answer.trim() || q.manual_answer,
+          answer_aliases_text:
+            hit.suggested_aliases.length > 0
+              ? hit.suggested_aliases.join(', ')
+              : q.answer_aliases_text,
+          grading_note: hit.suggested_grading_note.trim() || q.grading_note,
+          is_ai_candidate: true,
+        };
+      })
+    );
+    setSuggestionResult(null);
+    showToast(
+      `${selectedItems.length} 問の模範解答をフォームに反映しました。内容を確認のうえ保存してください。`,
+      'success'
+    );
   };
 
   const updateQuestion = (idx: number, patch: Partial<EditableQuestion>) => {
@@ -395,6 +531,12 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
           </div>
         </div>
 
+        {currentGroup.llm_usage && (currentGroup.llm_usage.total_tokens ?? 0) > 0 && (
+          <div className="px-4 sm:px-5 pb-3.5">
+            <GroupTokenUsageBar usage={currentGroup.llm_usage} variant="full" />
+          </div>
+        )}
+
         {/* 編集／登録後プレビュー切り替えタブリスト */}
         <div
           role="tablist"
@@ -466,12 +608,40 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
         {/* 左カラム */}
         <div className="lg:col-span-5 space-y-4 lg:sticky lg:top-20">
           <div className="ui-card p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="font-semibold text-sm text-slate-800 flex items-center gap-1.5">
                 <Crop className="w-4 h-4 text-indigo-600" />
                 原本画像・図版切り出し
               </div>
-              {cropping && <span className="text-xs text-indigo-600">切り出し処理中...</span>}
+              <div className="flex items-center gap-1.5">
+                {cropping && <span className="text-xs text-indigo-600">処理中...</span>}
+                {currentGroup.source_image_path && (
+                  <>
+                    <Tooltip content="原本画像と切り出し済みの全図版を左に90°一括回転します。">
+                      <button
+                        type="button"
+                        disabled={cropping}
+                        onClick={() => handleRotateSourceImage(270)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 transition"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        左90°
+                      </button>
+                    </Tooltip>
+                    <Tooltip content="原本画像と切り出し済みの全図版を右に90°一括回転します。">
+                      <button
+                        type="button"
+                        disabled={cropping}
+                        onClick={() => handleRotateSourceImage(90)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50 transition"
+                      >
+                        <RotateCw className="w-3.5 h-3.5" />
+                        右90°
+                      </button>
+                    </Tooltip>
+                  </>
+                )}
+              </div>
             </div>
 
             {currentGroup.source_image_path ? (
@@ -519,18 +689,52 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
                           placeholder="キャプション（例：図1）"
                           className="text-xs border border-slate-300 rounded px-2 py-1 bg-white w-32"
                         />
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleImageCleaned(img.id, !img.use_cleaned)}
-                            className={`text-xs px-2 py-1 rounded border font-medium ${
-                              img.use_cleaned
-                                ? 'bg-emerald-600 text-white border-emerald-600'
-                                : 'bg-white text-slate-700 border-slate-300'
-                            }`}
-                          >
-                            {img.use_cleaned ? '手書き除去: ON' : '原本表示中'}
-                          </button>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Tooltip content="補正後（赤青ペン除去＋白地補正）と切り抜き原本を切り替えます。">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleImageCleaned(img.id, !img.use_cleaned)}
+                              className={`text-xs px-2 py-1 rounded border font-medium ${
+                                img.use_cleaned
+                                  ? 'bg-emerald-600 text-white border-emerald-600'
+                                  : 'bg-white text-slate-700 border-slate-300'
+                              }`}
+                            >
+                              {img.use_cleaned ? '手書き除去: ON' : '原本表示中'}
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="切り抜き原本から最新の補正アルゴリズムを再実行します（白抜けや線のかすれを改善したいときに押してください）。">
+                            <button
+                              type="button"
+                              disabled={cropping}
+                              onClick={() => handleRecleanImage(img.id)}
+                              className="text-xs px-2 py-1 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-medium disabled:opacity-50"
+                            >
+                              再補正
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="この図版だけを左に90°回転します。">
+                            <button
+                              type="button"
+                              disabled={cropping}
+                              onClick={() => handleRotateImage(img.id, 270)}
+                              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                              aria-label="左に90度回転"
+                            >
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
+                          <Tooltip content="この図版だけを右に90°回転します。">
+                            <button
+                              type="button"
+                              disabled={cropping}
+                              onClick={() => handleRotateImage(img.id, 90)}
+                              className="p-1 rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+                              aria-label="右に90度回転"
+                            >
+                              <RotateCw className="w-3.5 h-3.5" />
+                            </button>
+                          </Tooltip>
                           <button
                             type="button"
                             onClick={() => setActiveImageId(isActive ? null : img.id)}
@@ -624,6 +828,63 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
                 <span>傍線 <code className="rounded bg-slate-100 px-1 py-0.5 text-slate-700">==対象==</code></span>
                 <span>空欄 <code className="rounded bg-slate-100 px-1 py-0.5 text-slate-700">[[1]]</code></span>
               </div>
+            </div>
+          </div>
+
+          {/* 模範解答 一括入力アシスト（オンライン自動採点用） */}
+          <div className="ui-card p-4 bg-indigo-50/45 border-indigo-200/70 flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950">
+                <Sparkles className="w-4 h-4 text-indigo-600" />
+                模範解答の一括入力アシスト（オンライン自動採点用）
+                <InfoTooltip
+                  label="模範解答アシストの説明"
+                  content="オンライン解答の自動採点には各設問の「模範解答」が必要です。AIによる下書き生成と、解答冊子の写真アップロードの2通りの方法で一括入力できます。いずれも確認画面を経てからフォームに反映されます。"
+                />
+              </div>
+              <p className="text-[11px] text-slate-600">
+                既存の手入力を勝手に上書きせず、確認ダイアログで1問ずつ見比べて反映できます。
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Tooltip content="登録済みの問題文・図版からAIが模範解答と別解の候補を下書き作成します（保護者確認後に保存）。">
+                <button
+                  type="button"
+                  disabled={suggestingAnswers || extractingAnswerImg || questions.length === 0}
+                  onClick={handleSuggestAnswersByAI}
+                  className="ui-btn-secondary px-3 py-1.5 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                >
+                  {suggestingAnswers ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {suggestingAnswers ? 'AI候補を作成中...' : 'AIで解答を下書き'}
+                </button>
+              </Tooltip>
+
+              <input
+                ref={answerImgInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleUploadAnswerSheet}
+              />
+              <Tooltip content="解答・解説ページの写真をアップロードすると、問題番号を自動照合して公式解答を一括抽出します。">
+                <button
+                  type="button"
+                  disabled={suggestingAnswers || extractingAnswerImg || questions.length === 0}
+                  onClick={() => answerImgInputRef.current?.click()}
+                  className="ui-btn-primary px-3 py-1.5 text-xs disabled:opacity-50"
+                >
+                  {extractingAnswerImg ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ImagePlus className="w-3.5 h-3.5" />
+                  )}
+                  {extractingAnswerImg ? '解答写真を解析中...' : '解答写真から取込'}
+                </button>
+              </Tooltip>
             </div>
           </div>
 
@@ -795,28 +1056,78 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
                   </div>
                 )}
 
-                {/* 保護者用手入力 解答メモ（任意・LLMは自動生成しない） */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-100">
+                {/* 模範解答・別解・採点ルール・メモ */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2 border-t border-slate-100">
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-0.5">
-                      解答（任意・保護者用手入力）
-                    </label>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <label className="text-[11px] font-semibold text-slate-600">
+                        模範解答（オンライン採点キー）
+                      </label>
+                      {q.is_ai_candidate && (
+                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                          候補反映済・要確認
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="text"
                       value={q.manual_answer}
-                      onChange={(e) => updateQuestion(idx, { manual_answer: e.target.value })}
-                      placeholder="必要な場合のみ入力"
-                      className="w-full rounded border border-slate-200 px-2.5 py-1 text-xs bg-slate-50/70"
+                      onChange={(e) =>
+                        updateQuestion(idx, {
+                          manual_answer: e.target.value,
+                          is_ai_candidate: false,
+                        })
+                      }
+                      placeholder="例：ア / 約束 / 光合成"
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs bg-slate-50/70"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] text-slate-500 mb-0.5">メモ（任意）</label>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <label className="text-[11px] font-semibold text-slate-600">
+                        別解（カンマ区切り・任意）
+                      </label>
+                      <InfoTooltip
+                        label="別解の説明"
+                        content="模範解答以外に正解とみなす表記をカンマ区切りで登録できます（例：こうごうせい, 光合成）。漢字の書き取り問題ではひらがなを別解に入れないでください。"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={q.answer_aliases_text}
+                      onChange={(e) => updateQuestion(idx, { answer_aliases_text: e.target.value })}
+                      placeholder="例：こうごうせい, 光合成作用"
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs bg-slate-50/70"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <label className="text-[11px] font-semibold text-slate-600">
+                        採点ルール（任意）
+                      </label>
+                      <InfoTooltip
+                        label="採点ルールの説明"
+                        content="AI自動採点時に厳守させたい条件を書きます（例：「必ず漢字で書くこと」「カタカナ指定」「理由に温度と体積の両方を含むこと」）。"
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={q.grading_note}
+                      onChange={(e) => updateQuestion(idx, { grading_note: e.target.value })}
+                      placeholder="例：漢字で書くこと / カタカナ指定"
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs bg-slate-50/70"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 mb-0.5">
+                      解説メモ（任意）
+                    </label>
                     <input
                       type="text"
                       value={q.memo}
                       onChange={(e) => updateQuestion(idx, { memo: e.target.value })}
-                      placeholder="解説・注意点など"
-                      className="w-full rounded border border-slate-200 px-2.5 py-1 text-xs bg-slate-50/70"
+                      placeholder="保護者向け解説・注意点など"
+                      className="w-full rounded border border-slate-200 px-2.5 py-1.5 text-xs bg-slate-50/70"
                     />
                   </div>
                 </div>
@@ -896,6 +1207,14 @@ export const ReviewPage: React.FC<ReviewPageProps> = ({ onDraftsUpdated }) => {
         description={`【${SUBJECT_LABELS[subject]}】${sourceName || '（出典なし）'} と紐づく小問・図版をすべて削除します。この操作は取り消せません。`}
         loading={deleting}
         onConfirm={handleConfirmDeleteGroup}
+      />
+
+      <AnswerSuggestionDialog
+        open={Boolean(suggestionResult)}
+        response={suggestionResult}
+        currentQuestions={questions}
+        onClose={() => setSuggestionResult(null)}
+        onApply={handleApplySuggestions}
       />
     </div>
   );

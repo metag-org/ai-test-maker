@@ -2,13 +2,16 @@ import base64
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.models.setting import AppSetting
 from app.services.llm.prompts import build_extraction_prompt
 from app.services.llm.schema import ExtractedPageResult
+
+T = TypeVar("T", bound=BaseModel)
 
 LLM_SETTINGS_KEY = "llm_config"
 
@@ -38,7 +41,7 @@ def mask_api_key(key: str) -> str:
     return f"{key[:4]}{'*' * (len(key) - 8)}{key[-4:]}"
 
 
-def _parse_json_safely(raw_text: str) -> ExtractedPageResult:
+def _parse_json_safely(raw_text: str, schema_cls: type[T]) -> T:
     text = raw_text.strip()
     fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, flags=re.DOTALL)
     if fence_match:
@@ -49,25 +52,30 @@ def _parse_json_safely(raw_text: str) -> ExtractedPageResult:
         if start != -1 and end != -1 and end > start:
             text = text[start : end + 1]
     data = json.loads(text)
-    return ExtractedPageResult.model_validate(data)
+    return schema_cls.model_validate(data)
 
 
-def extract_questions_from_image(
+def run_structured_llm_with_usage(
     db: Session,
-    image_abs_path: Path,
-    subject: str,
-) -> ExtractedPageResult:
+    prompt: str,
+    schema_cls: type[T],
+    images: list[tuple[bytes, str]] | None = None,
+    temperature: float = 0.1,
+) -> tuple[T, dict[str, Any]]:
+    """
+    汎用マルチモーダル構造化LLM呼び出し（トークン消費量も同時に返す）。
+    images: [(image_bytes, mime_type), ...]
+    """
     cfg = get_llm_config(db)
     provider = cfg.get("provider", "gemini")
-    prompt = build_extraction_prompt(subject)
-    image_bytes = image_abs_path.read_bytes()
+    image_list = images or []
 
     if provider == "gemini":
         api_key = (cfg.get("gemini_api_key") or "").strip()
         if not api_key:
             raise ValueError("Gemini APIキーが未設定です。「設定」画面からAPIキーを登録してください。")
         model_name = (cfg.get("gemini_model") or "gemini-2.5-flash").strip()
-        return _extract_with_gemini(api_key, model_name, image_bytes, prompt)
+        return _call_gemini_structured(api_key, model_name, prompt, schema_cls, image_list, temperature)
 
     if provider == "openai_compatible":
         api_key = (cfg.get("openai_api_key") or "").strip()
@@ -75,73 +83,143 @@ def extract_questions_from_image(
         model_name = (cfg.get("openai_model") or "gpt-4o").strip()
         if not api_key:
             raise ValueError("OpenAI互換 APIキーが未設定です。「設定」画面からAPIキーを登録してください。")
-        return _extract_with_openai(api_key, base_url, model_name, image_bytes, prompt)
+        return _call_openai_structured(api_key, base_url, model_name, prompt, schema_cls, image_list, temperature)
 
     raise ValueError(f"未対応のLLMプロバイダです: {provider}")
 
 
-def _extract_with_gemini(
+def run_structured_llm(
+    db: Session,
+    prompt: str,
+    schema_cls: type[T],
+    images: list[tuple[bytes, str]] | None = None,
+    temperature: float = 0.1,
+) -> T:
+    result, _ = run_structured_llm_with_usage(
+        db=db,
+        prompt=prompt,
+        schema_cls=schema_cls,
+        images=images,
+        temperature=temperature,
+    )
+    return result
+
+
+def _call_gemini_structured(
     api_key: str,
     model_name: str,
-    image_bytes: bytes,
     prompt: str,
-) -> ExtractedPageResult:
+    schema_cls: type[T],
+    images: list[tuple[bytes, str]],
+    temperature: float,
+) -> tuple[T, dict[str, Any]]:
     from google import genai
     from google.genai import types
 
     client = genai.Client(api_key=api_key)
+    contents: list[Any] = []
+    for img_bytes, mime_type in images:
+        contents.append(types.Part.from_bytes(data=img_bytes, mime_type=mime_type))
+    contents.append(prompt)
+
     response = client.models.generate_content(
         model=model_name,
-        contents=[
-            types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-            prompt,
-        ],
+        contents=contents,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=ExtractedPageResult,
-            temperature=0.1,
+            response_schema=schema_cls,
+            temperature=temperature,
         ),
     )
 
+    um = getattr(response, "usage_metadata", None)
+    input_tokens = int(getattr(um, "prompt_token_count", 0) or 0)
+    output_tokens = int(getattr(um, "candidates_token_count", 0) or 0)
+    thoughts_tokens = int(getattr(um, "thoughts_token_count", 0) or 0)
+    total_tokens = int(getattr(um, "total_token_count", 0) or (input_tokens + output_tokens + thoughts_tokens))
+    usage: dict[str, Any] = {
+        "provider": "gemini",
+        "model": model_name,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "thoughts_tokens": thoughts_tokens,
+        "total_tokens": total_tokens,
+    }
+
     if getattr(response, "parsed", None) is not None:
-        return ExtractedPageResult.model_validate(response.parsed)
+        return schema_cls.model_validate(response.parsed), usage
     raw_text = response.text or ""
     if not raw_text:
         raise RuntimeError("Gemini から空の応答が返されました。")
-    return _parse_json_safely(raw_text)
+    return _parse_json_safely(raw_text, schema_cls), usage
 
 
-def _extract_with_openai(
+def _call_openai_structured(
     api_key: str,
     base_url: str,
     model_name: str,
-    image_bytes: bytes,
     prompt: str,
-) -> ExtractedPageResult:
+    schema_cls: type[T],
+    images: list[tuple[bytes, str]],
+    temperature: float,
+) -> tuple[T, dict[str, Any]]:
     from openai import OpenAI
 
     client = OpenAI(api_key=api_key, base_url=base_url)
-    b64 = base64.b64encode(image_bytes).decode("ascii")
-    data_url = f"data:image/jpeg;base64,{b64}"
+    user_content: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for img_bytes, mime_type in images:
+        b64 = base64.b64encode(img_bytes).decode("ascii")
+        data_url = f"data:{mime_type};base64,{b64}"
+        user_content.append({"type": "image_url", "image_url": {"url": data_url, "detail": "high"}})
 
     response = client.chat.completions.create(
         model=model_name,
-        temperature=0.1,
+        temperature=temperature,
         response_format={"type": "json_object"},
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}},
-                ],
-            }
-        ],
+        messages=[{"role": "user", "content": user_content}],
     )
+    u = getattr(response, "usage", None)
+    input_tokens = int(getattr(u, "prompt_tokens", 0) or 0)
+    output_tokens = int(getattr(u, "completion_tokens", 0) or 0)
+    total_tokens = int(getattr(u, "total_tokens", 0) or (input_tokens + output_tokens))
+    usage: dict[str, Any] = {
+        "provider": "openai_compatible",
+        "model": model_name,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "thoughts_tokens": 0,
+        "total_tokens": total_tokens,
+    }
+
     content = response.choices[0].message.content or ""
     if not content:
         raise RuntimeError("OpenAI互換 API から空の応答が返されました。")
-    return _parse_json_safely(content)
+    return _parse_json_safely(content, schema_cls), usage
+
+
+def extract_questions_from_image_with_usage(
+    db: Session,
+    image_abs_path: Path,
+    subject: str,
+) -> tuple[ExtractedPageResult, dict[str, Any]]:
+    prompt = build_extraction_prompt(subject)
+    image_bytes = image_abs_path.read_bytes()
+    return run_structured_llm_with_usage(
+        db=db,
+        prompt=prompt,
+        schema_cls=ExtractedPageResult,
+        images=[(image_bytes, "image/jpeg")],
+        temperature=0.1,
+    )
+
+
+def extract_questions_from_image(
+    db: Session,
+    image_abs_path: Path,
+    subject: str,
+) -> ExtractedPageResult:
+    result, _ = extract_questions_from_image_with_usage(db, image_abs_path, subject)
+    return result
 
 
 def test_llm_connection(db: Session) -> dict[str, Any]:

@@ -90,6 +90,8 @@ export const ReviewPreviewPanel: React.FC<ReviewPreviewPanelProps> = ({
             : q.answer_box_config.type || 'blank_line',
       },
       manual_answer: q.manual_answer.trim() || null,
+      answer_aliases: [],
+      grading_note: '',
       memo: q.memo,
       tested_count: 0,
       wrong_count: 0,

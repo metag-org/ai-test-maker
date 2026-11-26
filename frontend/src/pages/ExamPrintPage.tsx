@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ClipboardCheck, FileText, Printer } from 'lucide-react';
+import { ArrowLeft, ClipboardCheck, FileText, PenLine, Printer } from 'lucide-react';
 import { api } from '../api/client';
+import { Tooltip } from '../components/Tooltip';
 import {
   clampFontScale,
   ExamFontSizeControl,
@@ -201,6 +202,16 @@ export const ExamPrintPage: React.FC = () => {
             <ClipboardCheck className="w-4 h-4" />
             {gradingMode ? '採点モード ON' : '採点・間違い記録'}
           </button>
+
+          <Tooltip content="このテストをPC・タブレットでそのまま手書き解答し、AI自動採点を行います。">
+            <Link
+              to={`/exams/${exam.id}/solve`}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 transition"
+            >
+              <PenLine className="w-4 h-4" />
+              オンラインで解く
+            </Link>
+          </Tooltip>
 
           <button
             type="button"

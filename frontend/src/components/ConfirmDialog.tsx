@@ -1,6 +1,6 @@
 import React from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { AlertTriangle, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, X } from 'lucide-react';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -8,7 +8,9 @@ interface ConfirmDialogProps {
   title: string;
   description: string;
   confirmLabel?: string;
+  loadingLabel?: string;
   cancelLabel?: string;
+  variant?: 'danger' | 'primary';
   loading?: boolean;
   onConfirm: () => void | Promise<void>;
 }
@@ -19,18 +21,25 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title,
   description,
   confirmLabel = '削除する',
+  loadingLabel = '削除中...',
   cancelLabel = 'キャンセル',
+  variant = 'danger',
   loading = false,
   onConfirm,
 }) => {
+  const isPrimary = variant === 'primary';
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !loading && onOpenChange(next)}>
       <Dialog.Portal>
         <Dialog.Overlay className="no-print fixed inset-0 z-50 bg-slate-900/45 backdrop-blur-[2px]" />
         <Dialog.Content className="no-print fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl bg-white p-6 shadow-xl border border-slate-200 focus:outline-none">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose-100 text-rose-600">
-              <AlertTriangle className="h-5 w-5" />
+            <div
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                isPrimary ? 'bg-indigo-100 text-indigo-600' : 'bg-rose-100 text-rose-600'
+              }`}
+            >
+              {isPrimary ? <CheckCircle2 className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
             </div>
             <div className="flex-1 min-w-0">
               <Dialog.Title className="text-base font-bold text-slate-900">
@@ -66,9 +75,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
               type="button"
               disabled={loading}
               onClick={onConfirm}
-              className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-sm hover:bg-rose-700 disabled:opacity-50"
+              className={`rounded-lg px-4 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-50 ${
+                isPrimary ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'
+              }`}
             >
-              {loading ? '削除中...' : confirmLabel}
+              {loading ? loadingLabel : confirmLabel}
             </button>
           </div>
         </Dialog.Content>

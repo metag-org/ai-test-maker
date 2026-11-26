@@ -1,11 +1,11 @@
 # NAS 生产一键部署编排：复用 NAS 已有 PostgreSQL（外部网络 nas-shared-net）
 services:
-  review-test:
+  sapix-test:
     build:
       context: .
       dockerfile: Dockerfile
-    image: review-test-app:latest
-    container_name: review-test-app
+    image: sapix-test-app:latest
+    container_name: sapix-test-app
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8089}:8000"

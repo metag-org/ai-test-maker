@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.routers import auth, exams, groups, settings as settings_router, upload
+from app.routers import auth, exams, groups, settings as settings_router, submissions, upload
 from app.routers.auth import is_request_authenticated
 
 app = FastAPI(title="復習テストメーカー API", version="1.0.0")
@@ -41,6 +41,7 @@ app.include_router(settings_router.router)
 app.include_router(upload.router)
 app.include_router(groups.router)
 app.include_router(exams.router)
+app.include_router(submissions.router)
 
 # アップロード画像の配信
 app.mount("/uploads", StaticFiles(directory=str(settings.upload_path)), name="uploads")

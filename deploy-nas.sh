@@ -10,8 +10,8 @@ NAS_HOST="${NAS_HOST:-192.168.99.200}"
 NAS_PORT="${NAS_PORT:-2222}"
 NAS_USER="${NAS_USER:-docker-user}"
 NAS_SSH_KEY="${NAS_SSH_KEY:-$HOME/.ssh/synology_nas}"
-NAS_DIR="${NAS_DIR:-/volume1/docker/review-test-maker}"
-ARCHIVE_PATH="/tmp/review_test_maker.tar.gz"
+NAS_DIR="${NAS_DIR:-/volume1/docker/sapix-test-maker}"
+ARCHIVE_PATH="/tmp/sapix_test_maker.tar.gz"
 
 SSH_BASE_OPTS=(-o StrictHostKeyChecking=no)
 if [ -f "${NAS_SSH_KEY}" ]; then
@@ -44,12 +44,16 @@ echo "==> [3/3] 正在 NAS 上构建镜像并更新容器..."
 ssh "${SSH_BASE_OPTS[@]}" -p "${NAS_PORT}" "${NAS_USER}@${NAS_HOST}" "
   set -e
   export PATH=/usr/local/bin:\$PATH
+  DOCKER_CMD='docker'
+  if ! docker info >/dev/null 2>&1; then
+    DOCKER_CMD='sudo -n docker'
+  fi
   mkdir -p ${NAS_DIR}/data/uploads
   if [ ! -f '${NAS_DIR}/.env' ]; then
     echo '❌ 错误: ${NAS_DIR}/.env 不存在，请先在 NAS 上配置 .env（可参考 .env.nas.example）'
     exit 1
   fi
-  if ! docker network inspect nas-shared-net >/dev/null 2>&1; then
+  if ! \${DOCKER_CMD} network inspect nas-shared-net >/dev/null 2>&1; then
     echo '❌ 错误: 外部 Docker 网络 nas-shared-net 不存在'
     exit 1
   fi
@@ -57,8 +61,8 @@ ssh "${SSH_BASE_OPTS[@]}" -p "${NAS_PORT}" "${NAS_USER}@${NAS_HOST}" "
   cp ${NAS_DIR}/docker-compose.nas.yml ${NAS_DIR}/docker-compose.yml
   rm -f ${ARCHIVE_PATH}
   cd ${NAS_DIR}
-  docker compose up -d --build
-  docker compose ps
+  \${DOCKER_CMD} compose up -d --build
+  \${DOCKER_CMD} compose ps
 "
 
 echo "✅ 发布完成！"

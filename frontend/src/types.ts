@@ -64,6 +64,8 @@ export interface Question {
   options: OptionItem[];
   answer_box_config: AnswerBoxConfig;
   manual_answer: string | null;
+  answer_aliases: string[];
+  grading_note: string;
   memo: string;
   tested_count: number;
   wrong_count: number;
@@ -81,6 +83,7 @@ export interface QuestionGroup {
   lead_text: string;
   status: GroupStatus;
   tags: string[];
+  llm_usage?: GroupLLMUsage;
   created_at: string;
   updated_at: string;
   questions: Question[];
@@ -114,6 +117,151 @@ export interface ExamSummary {
   item_count: number;
   wrong_count: number;
   subjects: SubjectType[];
+  submission_count: number;
+  latest_submission_id: string | null;
+  latest_submission_status: SubmissionStatus | null;
+  latest_correct_count: number | null;
+  latest_total_count: number | null;
+}
+
+export type SubmissionMode = 'full' | 'wrong_only';
+export type SubmissionStatus = 'in_progress' | 'grading' | 'graded' | 'reviewed';
+export type InputMode = 'choice' | 'handwriting' | 'text';
+export type AiGradeStatus =
+  | 'correct'
+  | 'wrong'
+  | 'partial'
+  | 'uncertain'
+  | 'no_key'
+  | 'unanswered';
+
+export interface StrokePoint {
+  x: number;
+  y: number;
+  p?: number;
+}
+
+export interface StrokeItem {
+  points: StrokePoint[];
+  size: number;
+}
+
+export interface StrokesData {
+  mode?: 'kanji_grid' | 'freehand';
+  cells?: StrokeItem[][];
+  strokes?: StrokeItem[];
+}
+
+export interface ExamAnswer {
+  id: string;
+  submission_id: string;
+  exam_item_id: string;
+  question_id: string;
+  input_mode: InputMode;
+  selected_options: string[];
+  typed_text: string;
+  strokes_data: StrokesData;
+  handwriting_image_path: string | null;
+  recognized_text: string | null;
+  stroke_issues: string | null;
+  ai_confidence: number | null;
+  ai_status: AiGradeStatus;
+  ai_feedback: string;
+  final_is_wrong: boolean | null;
+  updated_at: string;
+}
+
+export interface StageTokenUsage {
+  calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  thoughts_tokens?: number;
+  total_tokens: number;
+  shared_groups?: number;
+}
+
+export interface CallTokenUsage {
+  provider?: string;
+  model?: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  thoughts_tokens?: number;
+  total_tokens?: number;
+}
+
+export interface GroupLLMUsage {
+  provider?: string;
+  model?: string;
+  extract?: StageTokenUsage;
+  answer_suggest?: StageTokenUsage;
+  answer_image?: StageTokenUsage;
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  total_thoughts_tokens?: number;
+  total_tokens?: number;
+}
+
+export interface SubmissionLLMUsage {
+  provider?: string;
+  model?: string;
+  ocr?: StageTokenUsage;
+  semantic?: StageTokenUsage;
+  total_input_tokens?: number;
+  total_output_tokens?: number;
+  total_thoughts_tokens?: number;
+  total_tokens?: number;
+}
+
+export interface ExamSubmissionSummary {
+  id: string;
+  exam_id: string;
+  attempt_number: number;
+  mode: SubmissionMode;
+  status: SubmissionStatus;
+  started_at: string;
+  submitted_at: string | null;
+  duration_seconds: number;
+  total_count: number;
+  correct_count: number;
+  wrong_count: number;
+  uncertain_count: number;
+  synced_to_bank: boolean;
+  llm_usage?: SubmissionLLMUsage;
+}
+
+export interface SubmissionItemBundle {
+  exam_item: ExamItem;
+  question: Question;
+  answer: ExamAnswer;
+}
+
+export interface SubmissionGroupSection {
+  group: QuestionGroup;
+  items: SubmissionItemBundle[];
+}
+
+export interface ExamSubmissionDetail extends ExamSubmissionSummary {
+  exam_title: string;
+  sections: Partial<Record<SubjectType, SubmissionGroupSection[]>>;
+  all_attempts: ExamSubmissionSummary[];
+}
+
+export interface AnswerSuggestionItem {
+  question_id: string;
+  question_order: number;
+  suggested_answer: string;
+  suggested_aliases: string[];
+  suggested_grading_note: string;
+  confidence: number;
+  reason: string;
+}
+
+export interface AnswerSuggestionResponse {
+  group_id: string;
+  source: 'ai_suggest' | 'answer_image';
+  items: AnswerSuggestionItem[];
+  call_usage?: CallTokenUsage;
+  group_llm_usage?: GroupLLMUsage;
 }
 
 export interface ExamItem {

@@ -23,6 +23,8 @@ import { BankPage } from './pages/BankPage';
 import { ExamBuilderPage } from './pages/ExamBuilderPage';
 import { ExamHistoryPage } from './pages/ExamHistoryPage';
 import { ExamPrintPage } from './pages/ExamPrintPage';
+import { ExamSolvePage } from './pages/ExamSolvePage';
+import { ExamSubmissionReviewPage } from './pages/ExamSubmissionReviewPage';
 import { LoginPage } from './pages/LoginPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -200,6 +202,8 @@ export const App: React.FC = () => {
               <Route path="/exams/new" element={<ExamBuilderPage />} />
               <Route path="/exams" element={<ExamHistoryPage />} />
               <Route path="/exams/:id" element={<ExamPrintPage />} />
+              <Route path="/exams/:id/solve" element={<ExamSolvePage />} />
+              <Route path="/exams/:id/submissions/:submissionId" element={<ExamSubmissionReviewPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </main>

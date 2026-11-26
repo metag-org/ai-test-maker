@@ -1,14 +1,21 @@
 import type {
+  AnswerSuggestionResponse,
   CropBox,
+  ExamAnswer,
   ExamCandidateSelection,
   ExamDetail,
+  ExamSubmissionDetail,
+  ExamSubmissionSummary,
   ExamSummary,
   FacetsResponse,
+  InputMode,
   LLMSettings,
   QuestionGroup,
   QuestionGroupListResponse,
   QuestionImage,
+  StrokesData,
   SubjectType,
+  SubmissionMode,
 } from '../types';
 
 export class ApiError extends Error {
@@ -142,6 +149,20 @@ export const api = {
     }),
   deleteGroupImage: (groupId: string, imageId: string) =>
     request<{ deleted: boolean }>(`/api/groups/${groupId}/images/${imageId}`, { method: 'DELETE' }),
+  recleanGroupImage: (groupId: string, imageId: string) =>
+    request<QuestionImage>(`/api/groups/${groupId}/images/${imageId}/reclean`, { method: 'POST' }),
+  rotateGroupImage: (groupId: string, imageId: string, angleCw: 90 | 180 | 270) =>
+    request<QuestionImage>(`/api/groups/${groupId}/images/${imageId}/rotate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ angle_cw: angleCw }),
+    }),
+  rotateGroupSourceImage: (groupId: string, angleCw: 90 | 180 | 270) =>
+    request<QuestionGroup>(`/api/groups/${groupId}/source-image/rotate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ angle_cw: angleCw }),
+    }),
 
   // Exams
   generateExamCandidates: (payload: {
@@ -178,4 +199,90 @@ export const api = {
       body: JSON.stringify({ is_wrong: isWrong }),
     }),
   deleteExam: (id: string) => request<{ deleted: boolean }>(`/api/exams/${id}`, { method: 'DELETE' }),
+
+  // Standard Answer Suggestions (Dual-channel)
+  suggestGroupAnswers: (groupId: string) =>
+    request<AnswerSuggestionResponse>(`/api/groups/${groupId}/answers/suggest`, {
+      method: 'POST',
+    }),
+  extractGroupAnswersFromImage: (groupId: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return request<AnswerSuggestionResponse>(`/api/groups/${groupId}/answers/from-image`, {
+      method: 'POST',
+      body: fd,
+    });
+  },
+
+  // Online Solving & Submissions
+  listExamSubmissions: (examId: string) =>
+    request<ExamSubmissionSummary[]>(`/api/exams/${examId}/submissions`),
+  createSubmission: (examId: string, mode: SubmissionMode = 'full') =>
+    request<ExamSubmissionDetail>(`/api/exams/${examId}/submissions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
+    }),
+  getSubmission: (submissionId: string) =>
+    request<ExamSubmissionDetail>(`/api/submissions/${submissionId}`),
+  saveSubmissionAnswer: (
+    submissionId: string,
+    examItemId: string,
+    payload: {
+      input_mode: InputMode;
+      selected_options?: string[];
+      typed_text?: string;
+      strokes_data?: StrokesData;
+      image_data_url?: string | null;
+      duration_seconds?: number;
+    }
+  ) =>
+    request<ExamAnswer>(`/api/submissions/${submissionId}/answers/${examItemId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  submitSubmission: (submissionId: string, durationSeconds?: number) =>
+    request<ExamSubmissionDetail>(`/api/submissions/${submissionId}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ duration_seconds: durationSeconds }),
+    }),
+  regradeSubmission: (submissionId: string, rerunOcr = false) =>
+    request<ExamSubmissionDetail>(`/api/submissions/${submissionId}/regrade`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rerun_ocr: rerunOcr }),
+    }),
+  reviewSubmissionAnswer: (
+    submissionId: string,
+    examItemId: string,
+    finalIsWrong: boolean | null
+  ) =>
+    request<{
+      id: string;
+      exam_item_id: string;
+      final_is_wrong: boolean | null;
+      correct_count: number;
+      wrong_count: number;
+      uncertain_count: number;
+      status: string;
+    }>(`/api/submissions/${submissionId}/answers/${examItemId}/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ final_is_wrong: finalIsWrong }),
+    }),
+  syncSubmissionMistakes: (submissionId: string) =>
+    request<{
+      synced: boolean;
+      updated_count: number;
+      wrong_marked: number;
+      cleared_review: number;
+    }>(`/api/submissions/${submissionId}/sync-mistakes`, {
+      method: 'POST',
+    }),
+  deleteSubmission: (submissionId: string) =>
+    request<{ deleted: boolean }>(`/api/submissions/${submissionId}`, {
+      method: 'DELETE',
+    }),
 };

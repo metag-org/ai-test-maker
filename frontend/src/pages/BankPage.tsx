@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api, uploadUrl } from '../api/client';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { GroupTokenUsageBar } from '../components/GroupTokenUsageBar';
 import { RichJapaneseText } from '../components/RichJapaneseText';
 import { useToast } from '../components/ToastProvider';
 import type { FacetsResponse, QuestionGroup, SubjectType } from '../types';
@@ -397,6 +398,7 @@ export const BankPage: React.FC = () => {
                           図版 {grp.images.length}枚
                         </span>
                       )}
+                      <GroupTokenUsageBar usage={grp.llm_usage} variant="badge" />
                     </div>
 
                     <div className="flex items-center gap-1.5">
@@ -456,13 +458,25 @@ export const BankPage: React.FC = () => {
                             <RichJapaneseText text={q.body} />
                           </span>
                           {q.options && q.options.length > 0 && (
-                            <div className="mt-1.5 pl-7 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-                              {q.options.map((opt, oi) => (
-                                <span key={oi} className="inline-flex items-baseline gap-1">
-                                  <strong className="text-slate-800">{opt.label}</strong>
-                                  <span>{opt.text}</span>
-                                </span>
-                              ))}
+                            <div className="mt-1.5 pl-7 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+                              {q.options.map((opt, oi) => {
+                                const lbl = (opt.label || '').trim();
+                                const txt = (opt.text || '').trim();
+                                const same = !lbl || !txt || lbl === txt;
+                                return same ? (
+                                  <span
+                                    key={oi}
+                                    className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-700 font-medium"
+                                  >
+                                    {txt || lbl}
+                                  </span>
+                                ) : (
+                                  <span key={oi} className="inline-flex items-baseline gap-1">
+                                    <strong className="text-slate-800">{lbl}.</strong>
+                                    <span>{txt}</span>
+                                  </span>
+                                );
+                              })}
                             </div>
                           )}
                         </div>

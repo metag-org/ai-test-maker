@@ -25,6 +25,7 @@ class QuestionGroup(Base):
     lead_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")  # draft | published | archived
     tags: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    llm_usage: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now)
 
@@ -88,6 +89,8 @@ class Question(Base):
     options: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)  # [{label, text}]
     answer_box_config: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     manual_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answer_aliases: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    grading_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     memo: Mapped[str] = mapped_column(Text, nullable=False, default="")
     tested_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     wrong_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
