@@ -170,19 +170,37 @@ class EmbeddedPostgresManager:
             logger.warning("Removing stale postmaster.pid (dead PID %s).", pid)
             pid_file.unlink(missing_ok=True)
 
+    def _ensure_windows_acl_for_restricted_token(self) -> None:
+        """When running elevated on Windows (e.g. CI or UAC-off PC), initdb/pg_ctl drop
+        admin privileges via CreateRestrictedToken(). Ensure the non-elevated user token
+        still has full read/write access to data_root and pgdata_dir."""
+        if not is_windows_admin():
+            return
+        logger.warning(
+            "Running with Windows Administrator privileges; granting Authenticated Users "
+            "access to data directories so PostgreSQL's restricted token can start cleanly."
+        )
+        targets = {self.paths.data_root, self.paths.logs_dir, self.paths.pgdata_dir.parent}
+        if self.paths.pgdata_dir.exists():
+            targets.add(self.paths.pgdata_dir)
+        for target in targets:
+            target.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["icacls", str(target), "/grant", "*S-1-5-11:(OI)(CI)F", "/Q"],
+                capture_output=True,
+                check=False,
+                timeout=15,
+                **_no_window_kwargs(),
+            )
+
     def _ensure_initialized(self) -> None:
         pg_version_file = self.paths.pgdata_dir / "PG_VERSION"
         if pg_version_file.is_file():
             return
 
-        if is_windows_admin():
-            raise PermissionError(
-                "PostgreSQL cannot run with Windows Administrator privileges.\n"
-                "Please launch the application as a regular user (do not use 'Run as administrator')."
-            )
-
         logger.info("Initializing embedded PostgreSQL data directory at %s", self.paths.pgdata_dir)
         self.paths.pgdata_dir.mkdir(parents=True, exist_ok=True)
+        self._ensure_windows_acl_for_restricted_token()
         self._run(
             [
                 str(self._bin("initdb")),
@@ -239,12 +257,7 @@ class EmbeddedPostgresManager:
 
     def start(self) -> str:
         """Initialize (if needed) and start embedded PostgreSQL. Returns SQLAlchemy URL."""
-        if is_windows_admin():
-            raise PermissionError(
-                "PostgreSQL cannot run with Windows Administrator privileges.\n"
-                "Please launch the application as a regular user (do not use 'Run as administrator')."
-            )
-
+        self._ensure_windows_acl_for_restricted_token()
         self._ensure_initialized()
         self._cleanup_stale_pid()
         self.port = find_free_port(self.preferred_port)
