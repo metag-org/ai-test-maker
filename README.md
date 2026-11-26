@@ -4,9 +4,36 @@
 
 ## 技术架构
 
+- **桌面一键版（macOS / Windows，内置便携 PostgreSQL 16）**：免 Docker、免装数据库、双击启动；自带系统托盘菜单（浏览器打开、同 Wi-Fi 手机拍照地址、一键 `.zip` 数据与图片备份、安全关库）
 - **单 Docker 容器（轻量无 Chromium）**：Python 3.12 (`FastAPI` + `SQLAlchemy 2.0` + `Alembic` + `OpenCV headless`) + React 18 (`Vite` + `Tailwind CSS` + 离线内置日文印刷字体 `Shippori Mincho` / `BIZ UDPGothic`)
-- **数据库**：PostgreSQL（本地开发自带容器；NAS 生产复用外部网络 `nas-shared-net` 中的已有 Postgres）
+- **数据库**：PostgreSQL 16（桌面版内置绿色版 PostgreSQL；本地开发自带容器；NAS 生产复用外部网络 `nas-shared-net` 中的已有 Postgres）
 - **打印引擎**：纯浏览器打印 / 另存为 PDF（`@media print` + `@page` 支持 JIS B4/A4、国语竖排傍线与汉字方格、理社横排双栏、综合卷自动按科目分页）
+
+---
+
+## 零、桌面一键安装包（推荐普通用户，内置 PostgreSQL）
+
+无需安装 Docker、Python 或数据库，数据与题目 100% 保存在本机：
+- **macOS**：下载 `ReviewTestMaker-<version>-macos-<arm64|x86_64>.dmg`，拖入「应用程序」后双击运行（首次打开如提示“无法验证开发者”，请右键图标点击「打开」或在「系统设置 → 隐私与安全性」中点击「仍要打开」）。
+- **Windows**：下载 `ReviewTestMaker-<version>-windows-x64-setup.exe`，双击一键安装至当前用户目录（无需管理员权限，如遇 SmartScreen 提示点击「更多信息 → 仍要运行」）。
+- **数据与备份位置**：
+  - macOS：`~/Library/Application Support/ReviewTestMaker/`（含 `pgdata/`、`uploads/`、`backups/`、`logs/`）
+  - Windows：`%LOCALAPPDATA%\ReviewTestMaker\`
+  - 可在右上角/右下角系统托盘图标中随时点击 **「データ一括バックアップ (.zip)」** 导出数据库与图片完整备份压缩包。
+
+### 本地自行构建桌面安装包
+
+```bash
+# macOS（自动拉取便携版 PostgreSQL 16 + 构建前端 + 打包 .app 与 .dmg）
+./desktop/scripts/build_macos.sh
+```
+
+```powershell
+# Windows PowerShell（需安装 Python 3.12+、Node.js 20+ 与 Inno Setup 6）
+.\desktop\scripts\build_windows.ps1
+```
+
+> **自动发布双平台安装包**：推送形如 `v1.0.0` 的 Git Tag 或在 GitHub Actions 手动触发 `Build Desktop Installers (macOS & Windows)`，将自动构建 macOS (`arm64` / `x86_64`) `.dmg` 与 Windows `x64` `.exe` 安装包，执行内嵌 PostgreSQL 冒烟测试并发布至 GitHub Releases。
 
 ---
 

@@ -68,6 +68,15 @@ review-test-app.tar
 *.tar
 *.tar.gz
 
+# ===== 桌面端打包缓存与构建产物 =====
+desktop/.cache/
+desktop/.venv-build/
+desktop/build/
+desktop/dist/
+desktop/runtime/
+desktop/assets/app.ico
+desktop/assets/app.icns
+
 # ===== 日志与临时文件 =====
 logs/
 *.log

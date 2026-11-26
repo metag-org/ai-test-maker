@@ -1,0 +1,4 @@
+# 桌面端打包额外依赖（与 backend/requirements.txt 一同安装）
+pyinstaller>=6.11.0
+pystray>=0.19.5
+pyobjc-framework-Cocoa>=10.3; sys_platform == "darwin"

@@ -1,0 +1,149 @@
+name: Build Desktop Installers (macOS & Windows)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.0.0)"
+        required: false
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-15-intel
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve version
+        id: ver
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version || '1.0.0' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build macOS .app and .dmg
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./desktop/scripts/build_macos.sh
+
+      - name: Smoke-test embedded PostgreSQL & FastAPI inside .app
+        run: |
+          TMP_DATA="$(mktemp -d)"
+          REVIEW_TEST_DATA_ROOT="${TMP_DATA}" \
+            ./desktop/dist/ReviewTestMaker.app/Contents/MacOS/ReviewTestMaker --smoke-test
+          rm -rf "${TMP_DATA}"
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReviewTestMaker-macos-${{ matrix.arch }}
+          path: desktop/dist/*.dmg
+          if-no-files-found: error
+
+  build-windows:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Ensure Inno Setup 6 is installed
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "C:\Program Files (x86)\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup --no-progress -y
+          }
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $v = $env:GITHUB_REF.Substring("refs/tags/v".Length)
+          } else {
+            $v = "${{ github.event.inputs.version }}"
+            if (-not $v) { $v = "1.0.0" }
+          }
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+
+      - name: Build Windows bundle and Inno Setup .exe installer
+        shell: pwsh
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+        run: .\desktop\scripts\build_windows.ps1
+
+      - name: Smoke-test embedded PostgreSQL & FastAPI inside Windows bundle
+        shell: pwsh
+        run: |
+          $tmp = Join-Path $env:TEMP ("rtm-smoke-" + [guid]::NewGuid().ToString("N"))
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          $env:REVIEW_TEST_DATA_ROOT = $tmp
+          & .\desktop\dist\ReviewTestMaker\ReviewTestMaker.exe --smoke-test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Remove-Item -Recurse -Force $tmp
+
+      - name: Upload Windows Setup EXE artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReviewTestMaker-windows-x64
+          path: desktop/dist/*-setup.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [build-macos, build-windows]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*
+          generate_release_notes: true
