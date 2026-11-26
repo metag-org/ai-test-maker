@@ -250,28 +250,38 @@ class EmbeddedPostgresManager:
         self.port = find_free_port(self.preferred_port)
 
         pg_log = self.paths.logs_dir / "postgres.log"
-        pg_opts = [f"-h 127.0.0.1", f"-p {self.port}"]
+        pg_opts = ["-h 127.0.0.1", f"-p {self.port}"]
         if sys.platform != "win32":
             pg_opts.append(f"-k '{self.paths.pg_socket_dir}'")
-        else:
-            pg_opts.append("-c unix_socket_directories=''")
 
         logger.info("Starting embedded PostgreSQL on 127.0.0.1:%s ...", self.port)
-        self._run(
-            [
-                str(self._bin("pg_ctl")),
-                "-D",
-                str(self.paths.pgdata_dir),
-                "-l",
-                str(pg_log),
-                "-o",
-                " ".join(pg_opts),
-                "-w",
-                "-t",
-                "30",
-                "start",
-            ]
-        )
+        try:
+            self._run(
+                [
+                    str(self._bin("pg_ctl")),
+                    "-D",
+                    str(self.paths.pgdata_dir),
+                    "-l",
+                    str(pg_log),
+                    "-o",
+                    " ".join(pg_opts),
+                    "-w",
+                    "-t",
+                    "30",
+                    "start",
+                ]
+            )
+        except Exception as exc:
+            pg_tail = ""
+            if pg_log.is_file():
+                try:
+                    lines = pg_log.read_text(encoding="utf-8", errors="replace").splitlines()
+                    pg_tail = "\n".join(lines[-20:]).strip()
+                except Exception:
+                    pass
+            if pg_tail:
+                raise RuntimeError(f"{exc}\n\n--- postgres.log ---\n{pg_tail}") from exc
+            raise
         self._started = True
         self._wait_until_ready()
         self._ensure_database()

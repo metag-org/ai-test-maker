@@ -118,8 +118,20 @@ jobs:
           $tmp = Join-Path $env:TEMP ("rtm-smoke-" + [guid]::NewGuid().ToString("N"))
           New-Item -ItemType Directory -Force -Path $tmp | Out-Null
           $env:REVIEW_TEST_DATA_ROOT = $tmp
-          & .\desktop\dist\ReviewTestMaker\ReviewTestMaker.exe --smoke-test
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $proc = Start-Process `
+            -FilePath ".\desktop\dist\ReviewTestMaker\ReviewTestMaker.exe" `
+            -ArgumentList "--smoke-test" `
+            -PassThru -Wait
+          Write-Host "=== desktop.log ==="
+          Get-Content (Join-Path $tmp "logs\desktop.log") -ErrorAction SilentlyContinue
+          if ($proc.ExitCode -ne 0) {
+            Write-Host "=== postgres.log ==="
+            Get-Content (Join-Path $tmp "logs\postgres.log") -ErrorAction SilentlyContinue
+            exit $proc.ExitCode
+          }
+          if (-not (Test-Path (Join-Path $tmp "pgdata\PG_VERSION"))) {
+            throw "Smoke test did not initialize embedded PostgreSQL!"
+          }
           Remove-Item -Recurse -Force $tmp
 
       - name: Upload Windows Setup EXE artifact
