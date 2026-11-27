@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExtractedOption(BaseModel):
@@ -46,11 +46,22 @@ class ExtractedGroup(BaseModel):
 
 
 class ExtractedPageResult(BaseModel):
-    image_rotation_cw: Literal[0, 90, 180, 270] = Field(
+    image_rotation_cw: int = Field(
         default=0,
-        description="渡された写真が横向き・上下逆の場合に、印刷文字を正しい向きにするために必要な時計回りの回転角度（正立なら0、左倒しなら90、上下逆なら180、右倒しなら270）。",
+        ge=0,
+        le=270,
+        description="渡された写真が横向き・上下逆の場合に、印刷文字を正しい向きにするために必要な時計回りの回転角度（0, 90, 180, 270 のいずれかの整数。正立なら0、左倒しなら90、上下逆なら180、右倒しなら270）。",
     )
     groups: list[ExtractedGroup] = Field(default_factory=list)
+
+    @field_validator("image_rotation_cw", mode="before")
+    @classmethod
+    def normalize_rotation(cls, value: object) -> int:
+        try:
+            angle = int(value) % 360  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0
+        return angle if angle in (0, 90, 180, 270) else 0
 
 
 # --- Answer Key Suggestion / Extraction from Answer Sheet ---
