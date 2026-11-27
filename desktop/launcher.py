@@ -31,12 +31,25 @@ from desktop.tray import get_lan_ip, run_tray, show_error_dialog
 logger = logging.getLogger("desktop.launcher")
 
 
-def configure_logging(logs_dir: Path, verbose: bool = False) -> None:
+def _ensure_std_streams() -> bool:
+    """In PyInstaller GUI mode on Windows (console=False), sys.stdout/stderr are None.
+    Redirect missing streams to os.devnull so libraries calling .isatty() or .write() never crash.
+    Returns True if a real console stdout was present.
+    """
+    has_console = sys.stdout is not None
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    return has_console
+
+
+def configure_logging(logs_dir: Path, verbose: bool = False, has_console: bool = True) -> None:
     log_file = logs_dir / "desktop.log"
     handlers: list[logging.Handler] = [
         logging.FileHandler(log_file, encoding="utf-8"),
     ]
-    if not getattr(sys, "frozen", False) or verbose:
+    if has_console and (not getattr(sys, "frozen", False) or verbose):
         handlers.append(logging.StreamHandler(sys.stdout))
 
     logging.basicConfig(
@@ -127,6 +140,7 @@ class DesktopApp:
             host="0.0.0.0",
             port=self.app_port,
             log_level="warning",
+            log_config=None,
             access_log=False,
         )
         self.uvicorn_server = uvicorn.Server(config)
@@ -178,8 +192,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     args = parser.parse_args(argv)
 
+    has_console = _ensure_std_streams()
     paths = resolve_app_paths()
-    configure_logging(paths.logs_dir, verbose=args.verbose or args.smoke_test)
+    configure_logging(paths.logs_dir, verbose=args.verbose or args.smoke_test, has_console=has_console)
 
     # Single-instance check: focus existing instance instead of launching twice
     existing_url = _check_existing_instance(paths)
