@@ -18,6 +18,7 @@ jobs:
   build-macos:
     name: Build macOS (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -72,6 +73,7 @@ jobs:
   build-windows:
     name: Build Windows (x64)
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -121,12 +123,18 @@ jobs:
           $proc = Start-Process `
             -FilePath ".\desktop\dist\ReviewTestMaker\ReviewTestMaker.exe" `
             -ArgumentList "--smoke-test" `
-            -PassThru -Wait
+            -PassThru
+          $finished = $proc.WaitForExit(120000)
+          if (-not $finished) {
+            Write-Host "❌ Smoke test timed out after 120s; killing process..."
+            try { $proc.Kill($true) } catch {}
+          }
           Write-Host "=== desktop.log ==="
           Get-Content (Join-Path $tmp "logs\desktop.log") -ErrorAction SilentlyContinue
-          if ($proc.ExitCode -ne 0) {
+          if (-not $finished -or $proc.ExitCode -ne 0) {
             Write-Host "=== postgres.log ==="
             Get-Content (Join-Path $tmp "logs\postgres.log") -ErrorAction SilentlyContinue
+            if (-not $finished) { exit 124 }
             exit $proc.ExitCode
           }
           if (-not (Test-Path (Join-Path $tmp "pgdata\PG_VERSION"))) {

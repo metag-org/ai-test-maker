@@ -8,6 +8,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from datetime import datetime
@@ -128,23 +129,48 @@ class EmbeddedPostgresManager:
         return f"postgresql+psycopg://{DB_USER}@127.0.0.1:{self.port}/{DB_NAME}"
 
     def _run(self, args: list[str], check: bool = True, timeout: int = 120) -> subprocess.CompletedProcess:
+        """Run a PostgreSQL CLI command using file-backed output redirection.
+
+        IMPORTANT: On Windows, `pg_ctl start` spawns background `postgres.exe` which
+        inherits stdout/stderr PIPE handles. Using `capture_output=True` (PIPE) causes
+        Python's `subprocess.run()` to block forever waiting for pipe EOF even after
+        `pg_ctl.exe` exits. Redirecting to regular files avoids pipe deadlocks completely.
+        """
         logger.debug("Running PG command: %s", " ".join(args))
-        proc = subprocess.run(
-            args,
-            env=self._pg_env(),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
-            **_no_window_kwargs(),
-        )
-        if check and proc.returncode != 0:
+        self.paths.logs_dir.mkdir(parents=True, exist_ok=True)
+        out_fd, out_path = tempfile.mkstemp(prefix="pg_out_", suffix=".log", dir=str(self.paths.logs_dir))
+        err_fd, err_path = tempfile.mkstemp(prefix="pg_err_", suffix=".log", dir=str(self.paths.logs_dir))
+        stdout_text = ""
+        stderr_text = ""
+        try:
+            with os.fdopen(out_fd, "wb") as out_fp, os.fdopen(err_fd, "wb") as err_fp:
+                proc = subprocess.run(
+                    args,
+                    env=self._pg_env(),
+                    stdin=subprocess.DEVNULL,
+                    stdout=out_fp,
+                    stderr=err_fp,
+                    timeout=timeout,
+                    close_fds=True,
+                    **_no_window_kwargs(),
+                )
+            stdout_text = Path(out_path).read_text(encoding="utf-8", errors="replace")
+            stderr_text = Path(err_path).read_text(encoding="utf-8", errors="replace")
+        finally:
+            for p in (out_path, err_path):
+                try:
+                    Path(p).unlink(missing_ok=True)
+                except OSError:
+                    # On Windows, background postgres.exe may briefly keep the handle open
+                    pass
+
+        result = subprocess.CompletedProcess(args, proc.returncode, stdout_text, stderr_text)
+        if check and result.returncode != 0:
             raise RuntimeError(
-                f"PostgreSQL command failed ({proc.returncode}): {' '.join(args)}\n"
-                f"STDOUT: {proc.stdout.strip()}\nSTDERR: {proc.stderr.strip()}"
+                f"PostgreSQL command failed ({result.returncode}): {' '.join(args)}\n"
+                f"STDOUT: {stdout_text.strip()}\nSTDERR: {stderr_text.strip()}"
             )
-        return proc
+        return result
 
     def _cleanup_stale_pid(self) -> None:
         pid_file = self.paths.pgdata_dir / "postmaster.pid"

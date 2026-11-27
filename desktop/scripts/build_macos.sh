@@ -94,12 +94,23 @@ ln -s /Applications "${DMG_STAGING}/Applications"
 DMG_NAME="ReviewTestMaker-${APP_VERSION}-macos-${ARCH}.dmg"
 DMG_PATH="${DIST_DIR}/${DMG_NAME}"
 rm -f "${DMG_PATH}"
-hdiutil create \
-  -volname "ReviewTestMaker" \
-  -srcfolder "${DMG_STAGING}" \
-  -ov \
-  -format UDZO \
-  "${DMG_PATH}"
+for attempt in 1 2 3 4 5; do
+  if hdiutil create \
+    -volname "ReviewTestMaker" \
+    -srcfolder "${DMG_STAGING}" \
+    -ov \
+    -format UDZO \
+    "${DMG_PATH}"; then
+    break
+  fi
+  if [ "${attempt}" -eq 5 ]; then
+    echo "❌ hdiutil create failed after 5 attempts"
+    exit 1
+  fi
+  echo "hdiutil create failed (attempt ${attempt}/5), retrying in 5s..."
+  rm -f "${DMG_PATH}"
+  sleep 5
+done
 
 echo "✅ macOS build complete:"
 echo "   App: ${APP_BUNDLE}"
